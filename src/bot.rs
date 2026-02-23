@@ -6,8 +6,8 @@ use crate::{
 use regex::Regex;
 use teloxide::prelude::*;
 use teloxide::types::{
-    CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntityKind, ParseMode,
-    ReplyParameters,
+    CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntityKind, MessageId,
+    ParseMode, ReplyParameters,
 };
 use teloxide::utils::html;
 use whatlang::{Lang, detect};
@@ -147,7 +147,8 @@ pub async fn handle_message(
                 match cmd {
                     "/start" => {
                         tracing::info!("Gestione comando /start per utente {}", user_id);
-                        handle_start_command(bot.clone(), chat_id, user_id, &tr, &config).await?;
+                        handle_start_command(bot.clone(), chat_id, user_id, &tr, &config, None)
+                            .await?;
                         return Ok(());
                     }
                     "/help" => {
@@ -427,6 +428,7 @@ async fn handle_start_command(
     user_id: i64,
     tr: &crate::i18n::Translations,
     _config: &crate::config::Config,
+    message_id: Option<MessageId>,
 ) -> ResponseResult<()> {
     let welcome_text = tr.welcome.replace("{}", &user_id.to_string());
 
@@ -436,10 +438,15 @@ async fn handle_start_command(
         InlineKeyboardButton::callback(tr.start_view_stats, format!("user_setting:stats:{}", user_id)),
     ]]);
 
-    bot.send_message(chat_id, welcome_text)
-        .parse_mode(ParseMode::Html)
-        .reply_markup(keyboard)
-        .await?;
+    upsert_settings_view(
+        &bot,
+        chat_id,
+        message_id,
+        welcome_text,
+        Some(keyboard),
+        true,
+    )
+    .await?;
 
     Ok(())
 }
@@ -490,6 +497,10 @@ async fn handle_callback(
         .as_ref()
         .map(teloxide::types::MaybeInaccessibleMessage::chat)
         .map(|chat| chat.id);
+    let message_id = q
+        .message
+        .as_ref()
+        .map(teloxide::types::MaybeInaccessibleMessage::id);
     let user_id = q.from.id.0 as i64;
 
     // Get user's preferred language
@@ -499,13 +510,24 @@ async fn handle_callback(
 
     if let Some(chat_id) = chat_id {
         if callback_data.starts_with("settings:") {
-            handle_settings_callback(bot.clone(), chat_id, user_id, db, config, &tr).await?;
+            handle_settings_callback(bot.clone(), chat_id, message_id, user_id, db, config, &tr)
+                .await?;
         } else if callback_data.starts_with("user_setting:") {
-            handle_user_settings_callback(bot.clone(), chat_id, user_id, callback_data, db, &tr).await?;
+            handle_user_settings_callback(
+                bot.clone(),
+                chat_id,
+                message_id,
+                user_id,
+                callback_data,
+                db,
+                &tr,
+            )
+            .await?;
         } else if callback_data.starts_with("admin_setting:") {
             handle_admin_settings_callback(
                 bot.clone(),
                 chat_id,
+                message_id,
                 user_id,
                 callback_data,
                 db,
@@ -520,6 +542,7 @@ async fn handle_callback(
                 user_id,
                 &tr,
                 &config,
+                message_id,
             )
             .await?;
         }
@@ -534,6 +557,7 @@ async fn handle_callback(
 async fn handle_settings_callback(
     bot: Bot,
     chat_id: ChatId,
+    message_id: Option<MessageId>,
     user_id: i64,
     db: Db,
     config: crate::config::Config,
@@ -601,10 +625,7 @@ async fn handle_settings_callback(
 
     let keyboard = InlineKeyboardMarkup::new(keyboard_rows);
 
-    bot.send_message(chat_id, settings_text)
-        .parse_mode(ParseMode::Html)
-        .reply_markup(keyboard)
-        .await?;
+    upsert_settings_view(&bot, chat_id, message_id, settings_text, Some(keyboard), true).await?;
 
     Ok(())
 }
@@ -612,6 +633,7 @@ async fn handle_settings_callback(
 async fn handle_user_settings_callback(
     bot: Bot,
     chat_id: ChatId,
+    message_id: Option<MessageId>,
     user_id: i64,
     callback_data: &str,
     db: Db,
@@ -619,6 +641,20 @@ async fn handle_user_settings_callback(
 ) -> ResponseResult<()> {
     let parts: Vec<&str> = callback_data.split(':').collect();
     if parts.len() < 3 {
+        return Ok(());
+    }
+
+    let target_user_id = callback_target_user_id(&parts, user_id);
+    if target_user_id != user_id {
+        upsert_settings_view(
+            &bot,
+            chat_id,
+            message_id,
+            tr.s_admin_no_permission.to_string(),
+            None,
+            false,
+        )
+        .await?;
         return Ok(());
     }
 
@@ -689,12 +725,80 @@ async fn handle_user_settings_callback(
             ]);
             (message, keyboard)
         },
+        "stats" => {
+            let stats_text = tr
+                .stats_text
+                .replace("{}", &user_config.cleaned_count.to_string());
+            let keyboard = InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback(
+                tr.s_back,
+                format!("settings:{}", user_id),
+            )]]);
+            (stats_text, keyboard)
+        }
+        "set_mode" if parts.len() >= 4 => {
+            let mode = parts[2];
+            if mode == "reply" || mode == "delete" {
+                let mut updated = user_config.clone();
+                updated.mode = mode.to_string();
+                if let Err(e) = db.save_user_config(&updated).await {
+                    tracing::error!(error = %e, user_id, "Errore nel salvataggio modalita' link");
+                }
+            }
+
+            let refreshed = db.get_user_config(user_id).await.unwrap_or_default();
+            let mode_label = match refreshed.mode.as_str() {
+                "reply" => tr.s_reply_mode,
+                "delete" => tr.s_delete_mode,
+                _ => refreshed.mode.as_str(),
+            };
+
+            let message = format!(
+                "<b>{}</b>\n\n{}: <b>{}</b>\n\n{}",
+                tr.s_links_title,
+                tr.s_action_mode,
+                mode_label,
+                tr.s_links_desc
+            );
+            let keyboard = InlineKeyboardMarkup::new(vec![
+                vec![
+                    InlineKeyboardButton::callback(
+                        tr.s_reply_mode,
+                        format!("user_setting:set_mode:reply:{}", user_id),
+                    ),
+                    InlineKeyboardButton::callback(
+                        tr.s_delete_mode,
+                        format!("user_setting:set_mode:delete:{}", user_id),
+                    ),
+                ],
+                vec![InlineKeyboardButton::callback(
+                    tr.s_back,
+                    format!("settings:{}", user_id),
+                )],
+            ]);
+            (message, keyboard)
+        }
+        "clear_history" => {
+            if let Err(e) = db.clear_history(user_id).await {
+                tracing::error!(error = %e, user_id, "Errore nella cancellazione cronologia");
+            }
+            let mut updated = user_config.clone();
+            updated.cleaned_count = 0;
+            if let Err(e) = db.save_user_config(&updated).await {
+                tracing::error!(error = %e, user_id, "Errore nel reset contatore pulizie");
+            }
+
+            let keyboard = InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback(
+                tr.s_back,
+                format!("settings:{}", user_id),
+            )]]);
+            (tr.s_setting_updated.to_string(), keyboard)
+        }
         "toggle" if parts.len() >= 4 => {
             let setting = parts[2];
             let value = parts[3];
             
             // Handle toggle logic here (would update database)
-            handle_setting_toggle(bot, chat_id, user_id, setting, value, db, tr).await?;
+            handle_setting_toggle(bot, chat_id, message_id, user_id, setting, value, db, tr).await?;
             return Ok(());
         },
         _ => (
@@ -703,10 +807,7 @@ async fn handle_user_settings_callback(
         ),
     };
 
-    bot.send_message(chat_id, message_text)
-        .parse_mode(ParseMode::Html)
-        .reply_markup(keyboard)
-        .await?;
+    upsert_settings_view(&bot, chat_id, message_id, message_text, Some(keyboard), true).await?;
 
     Ok(())
 }
@@ -714,21 +815,43 @@ async fn handle_user_settings_callback(
 async fn handle_admin_settings_callback(
     bot: Bot,
     chat_id: ChatId,
+    message_id: Option<MessageId>,
     user_id: i64,
     callback_data: &str,
-    _db: Db,
+    db: Db,
     config: &crate::config::Config,
     tr: &crate::i18n::Translations,
 ) -> ResponseResult<()> {
     // Verify admin permissions
     if user_id != config.admin_id {
-        bot.send_message(chat_id, tr.s_admin_no_permission)
-            .await?;
+        upsert_settings_view(
+            &bot,
+            chat_id,
+            message_id,
+            tr.s_admin_no_permission.to_string(),
+            None,
+            false,
+        )
+        .await?;
         return Ok(());
     }
 
     let parts: Vec<&str> = callback_data.split(':').collect();
     if parts.len() < 3 {
+        return Ok(());
+    }
+
+    let target_user_id = callback_target_user_id(&parts, user_id);
+    if target_user_id != user_id {
+        upsert_settings_view(
+            &bot,
+            chat_id,
+            message_id,
+            tr.s_admin_no_permission.to_string(),
+            None,
+            false,
+        )
+        .await?;
         return Ok(());
     }
 
@@ -770,11 +893,8 @@ async fn handle_admin_settings_callback(
             (message, keyboard)
         }
         "stats" => {
-            let message = format!(
-                "<b>{}</b>\n\n{}",
-                tr.s_global_stats_title,
-                tr.s_global_stats_desc
-            );
+            let (total_cleaned, total_users) = db.get_global_stats().await.unwrap_or((0, 0));
+            let message = admin_global_stats_message(tr, total_users, total_cleaned);
             let keyboard = InlineKeyboardMarkup::new(vec![
                 vec![InlineKeyboardButton::callback(
                     tr.s_refresh,
@@ -787,6 +907,75 @@ async fn handle_admin_settings_callback(
             ]);
             (message, keyboard)
         }
+        "refresh_stats" => {
+            let (total_cleaned, total_users) = db.get_global_stats().await.unwrap_or((0, 0));
+            let message = admin_global_stats_message(tr, total_users, total_cleaned);
+            let keyboard = InlineKeyboardMarkup::new(vec![
+                vec![InlineKeyboardButton::callback(
+                    tr.s_refresh,
+                    format!("admin_setting:refresh_stats:{}", user_id),
+                )],
+                vec![InlineKeyboardButton::callback(
+                    tr.s_back,
+                    format!("settings:{}", user_id),
+                )],
+            ]);
+            (message, keyboard)
+        }
+        "users" => {
+            let (_, total_users) = db.get_global_stats().await.unwrap_or((0, 0));
+            let message = admin_users_message(tr, total_users);
+            let keyboard = InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback(
+                tr.s_back,
+                format!("admin_setting:panel:{}", user_id),
+            )]]);
+            (message, keyboard)
+        }
+        "system" => {
+            let message = admin_system_message(tr);
+            let keyboard = InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback(
+                tr.s_back,
+                format!("admin_setting:panel:{}", user_id),
+            )]]);
+            (message, keyboard)
+        }
+        "global_stats" => {
+            let (total_cleaned, total_users) = db.get_global_stats().await.unwrap_or((0, 0));
+            let message = admin_global_stats_message(tr, total_users, total_cleaned);
+            let keyboard = InlineKeyboardMarkup::new(vec![
+                vec![InlineKeyboardButton::callback(
+                    tr.s_refresh,
+                    format!("admin_setting:refresh_stats:{}", user_id),
+                )],
+                vec![InlineKeyboardButton::callback(
+                    tr.s_back,
+                    format!("admin_setting:panel:{}", user_id),
+                )],
+            ]);
+            (message, keyboard)
+        }
+        "maintenance" => {
+            let message = admin_maintenance_message(tr);
+            let keyboard = InlineKeyboardMarkup::new(vec![
+                vec![InlineKeyboardButton::callback(
+                    tr.s_clear_history,
+                    format!("admin_setting:clear_all_history:{}", user_id),
+                )],
+                vec![InlineKeyboardButton::callback(
+                    tr.s_back,
+                    format!("admin_setting:panel:{}", user_id),
+                )],
+            ]);
+            (message, keyboard)
+        }
+        "clear_all_history" => {
+            let message = tr.s_admin_server_only_op.to_string();
+            let keyboard = InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback(
+                tr.s_back,
+                format!("admin_setting:maintenance:{}", user_id),
+            )]]);
+            (message, keyboard)
+        }
         _ => {
             let message = tr.s_admin_option_not_found.to_string();
             let keyboard = InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback(
@@ -797,10 +986,7 @@ async fn handle_admin_settings_callback(
         }
     };
 
-    bot.send_message(chat_id, message_text)
-        .parse_mode(ParseMode::Html)
-        .reply_markup(keyboard)
-        .await?;
+    upsert_settings_view(&bot, chat_id, message_id, message_text, Some(keyboard), true).await?;
 
     Ok(())
 }
@@ -808,23 +994,208 @@ async fn handle_admin_settings_callback(
 async fn handle_setting_toggle(
     bot: Bot,
     chat_id: ChatId,
-    _user_id: i64,
+    message_id: Option<MessageId>,
+    user_id: i64,
     setting: &str,
     value: &str,
-    _db: Db,
+    db: Db,
     tr: &crate::i18n::Translations,
 ) -> ResponseResult<()> {
-    // This would update the database in a real implementation
-    let result_message = match (setting, value) {
-        ("notif", "1") => tr.s_notif_enabled,
-        ("notif", "0") => tr.s_notif_disabled,
-        ("ai", _) => tr.s_ai_toggled,
+    let mut user_config = db.get_user_config(user_id).await.unwrap_or_default();
+    let result_message = match setting {
+        "notif" => {
+            user_config.enabled = if value == "1" { 1 } else { 0 };
+            if let Err(e) = db.save_user_config(&user_config).await {
+                tracing::error!(error = %e, user_id, "Errore nel salvataggio toggle notifiche");
+            }
+            if user_config.enabled == 1 {
+                tr.s_notif_enabled
+            } else {
+                tr.s_notif_disabled
+            }
+        }
+        "ai" => {
+            user_config.ai_enabled = if user_config.ai_enabled == 0 { 1 } else { 0 };
+            if let Err(e) = db.save_user_config(&user_config).await {
+                tracing::error!(error = %e, user_id, "Errore nel salvataggio toggle AI");
+            }
+            tr.s_ai_toggled
+        }
         _ => tr.s_setting_updated,
     };
 
-    bot.send_message(chat_id, result_message)
-        .parse_mode(ParseMode::Html)
-        .await?;
+    let keyboard = InlineKeyboardMarkup::new(vec![vec![InlineKeyboardButton::callback(
+        tr.s_back,
+        format!("settings:{}", user_id),
+    )]]);
+
+    upsert_settings_view(
+        &bot,
+        chat_id,
+        message_id,
+        result_message.to_string(),
+        Some(keyboard),
+        true,
+    )
+    .await?;
 
     Ok(())
+}
+
+async fn upsert_settings_view(
+    bot: &Bot,
+    chat_id: ChatId,
+    message_id: Option<MessageId>,
+    text: String,
+    keyboard: Option<InlineKeyboardMarkup>,
+    parse_html: bool,
+) -> ResponseResult<()> {
+    if let Some(message_id) = message_id {
+        let mut edit = bot.edit_message_text(chat_id, message_id, text.clone());
+        if parse_html {
+            edit = edit.parse_mode(ParseMode::Html);
+        }
+        if let Some(kb) = keyboard.clone() {
+            edit = edit.reply_markup(kb);
+        }
+
+        match edit.await {
+            Ok(_) => return Ok(()),
+            Err(err) => {
+                if is_message_not_modified_error(&err.to_string()) {
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    let mut send = bot.send_message(chat_id, text);
+    if parse_html {
+        send = send.parse_mode(ParseMode::Html);
+    }
+    if let Some(kb) = keyboard {
+        send = send.reply_markup(kb);
+    }
+    send.await?;
+
+    Ok(())
+}
+
+fn callback_target_user_id(parts: &[&str], fallback_user_id: i64) -> i64 {
+    parts
+        .last()
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(fallback_user_id)
+}
+
+fn is_message_not_modified_error(error_text: &str) -> bool {
+    error_text.to_lowercase().contains("message is not modified")
+}
+
+fn admin_global_stats_message(
+    tr: &crate::i18n::Translations,
+    total_users: i64,
+    total_cleaned: i64,
+) -> String {
+    format!(
+        "<b>{}</b>\n\n{}\n\n👥 {}: <b>{}</b>\n🔗 {}: <b>{}</b>",
+        tr.s_global_stats_title,
+        tr.s_global_stats_desc,
+        tr.s_total_users_label,
+        total_users,
+        tr.s_total_cleaned_label,
+        total_cleaned
+    )
+}
+
+fn admin_users_message(tr: &crate::i18n::Translations, total_users: i64) -> String {
+    format!(
+        "<b>{}</b>\n\n{}: <b>{}</b>",
+        tr.s_user_management, tr.s_admin_users_total, total_users
+    )
+}
+
+fn admin_system_message(tr: &crate::i18n::Translations) -> String {
+    format!("<b>{}</b>\n\n{}", tr.s_system_settings, tr.s_admin_system_note)
+}
+
+fn admin_maintenance_message(tr: &crate::i18n::Translations) -> String {
+    format!("<b>{}</b>\n\n{}", tr.s_maintenance, tr.s_admin_maintenance_none)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        admin_global_stats_message, admin_maintenance_message, admin_system_message,
+        admin_users_message, callback_target_user_id, is_message_not_modified_error,
+    };
+    use crate::i18n;
+
+    #[test]
+    fn callback_target_user_id_uses_last_segment_when_numeric() {
+        let parts = vec!["user_setting", "toggle", "ai", "42"];
+        let user_id = callback_target_user_id(&parts, 7);
+        assert_eq!(user_id, 42);
+    }
+
+    #[test]
+    fn callback_target_user_id_falls_back_when_last_segment_is_not_numeric() {
+        let parts = vec!["user_setting", "toggle", "ai", "abc"];
+        let user_id = callback_target_user_id(&parts, 7);
+        assert_eq!(user_id, 7);
+    }
+
+    #[test]
+    fn callback_target_user_id_falls_back_on_empty_parts() {
+        let parts: Vec<&str> = vec![];
+        let user_id = callback_target_user_id(&parts, 15);
+        assert_eq!(user_id, 15);
+    }
+
+    #[test]
+    fn detects_message_not_modified_error_case_insensitive() {
+        let error_text = "Bad Request: MESSAGE IS NOT MODIFIED";
+        assert!(is_message_not_modified_error(error_text));
+    }
+
+    #[test]
+    fn ignores_other_errors() {
+        let error_text = "Bad Request: message to edit not found";
+        assert!(!is_message_not_modified_error(error_text));
+    }
+
+    #[test]
+    fn admin_global_stats_message_includes_values_and_labels() {
+        let tr = i18n::get_translations("it");
+        let message = admin_global_stats_message(&tr, 12, 345);
+        assert!(message.contains(tr.s_total_users_label));
+        assert!(message.contains(tr.s_total_cleaned_label));
+        assert!(message.contains("12"));
+        assert!(message.contains("345"));
+    }
+
+    #[test]
+    fn admin_users_message_includes_total_users() {
+        let tr = i18n::get_translations("en");
+        let message = admin_users_message(&tr, 27);
+        assert!(message.contains(tr.s_user_management));
+        assert!(message.contains(tr.s_admin_users_total));
+        assert!(message.contains("27"));
+    }
+
+    #[test]
+    fn admin_system_message_uses_localized_note() {
+        let tr = i18n::get_translations("it");
+        let message = admin_system_message(&tr);
+        assert!(message.contains(tr.s_system_settings));
+        assert!(message.contains(tr.s_admin_system_note));
+    }
+
+    #[test]
+    fn admin_maintenance_message_uses_localized_note() {
+        let tr = i18n::get_translations("en");
+        let message = admin_maintenance_message(&tr);
+        assert!(message.contains(tr.s_maintenance));
+        assert!(message.contains(tr.s_admin_maintenance_none));
+    }
 }
