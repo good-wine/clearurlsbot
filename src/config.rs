@@ -30,8 +30,8 @@ impl Config {
     pub fn from_env() -> Result<Self> {
         dotenv().ok();
 
-        let bot_token = env::var("TELOXIDE_TOKEN").context("TELOXIDE_TOKEN must be set")?;
-        let mut bot_username = env::var("BOT_USERNAME").context("BOT_USERNAME must be set")?;
+        let bot_token = env::var("TELOXIDE_TOKEN").context("TELOXIDE_TOKEN deve essere impostato")?;
+        let mut bot_username = env::var("BOT_USERNAME").context("BOT_USERNAME deve essere impostato")?;
         if bot_username.starts_with('@') {
             bot_username = bot_username[1..].to_string();
         }
@@ -80,7 +80,7 @@ impl Config {
         for port in reserved_ports {
             if self.server_addr.contains(port) {
                 anyhow::bail!(
-                    "FATAL: Port {} is reserved by Render and cannot be used.",
+                    "FATAL: La porta {} e' riservata da Render e non puo' essere usata.",
                     port
                 );
             }

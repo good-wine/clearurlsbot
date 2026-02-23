@@ -14,7 +14,7 @@ async fn main() -> anyhow::Result<()> {
     logging::init_logging();
 
     let pid = std::process::id();
-    tracing::info!(pid = %pid, "ClearURLs Bot starting up");
+    tracing::info!(pid = %pid, "Avvio ClearURLs Bot");
 
     let config = Config::from_env()?;
     config.validate()?;
@@ -44,21 +44,21 @@ async fn main() -> anyhow::Result<()> {
     let rules_refresh = rules.clone();
     let refresh_task = tokio::spawn(async move {
         if let Err(e) = rules_refresh.refresh().await {
-            tracing::error!("Failed initial rules fetch: {}", e);
+            tracing::error!("Errore nel download iniziale delle regole: {}", e);
         }
         let mut interval = interval(Duration::from_secs(86400));
         interval.tick().await;
         loop {
             interval.tick().await;
             if let Err(e) = rules_refresh.refresh().await {
-                tracing::error!("Failed to refresh rules: {}", e);
+                tracing::error!("Errore durante l'aggiornamento delle regole: {}", e);
             }
         }
     });
 
     tokio::select! {
-        res = bot_task => tracing::error!("Bot task finished: {:?}", res),
-        res = refresh_task => tracing::error!("Refresh task finished: {:?}", res),
+        res = bot_task => tracing::error!("Task bot terminato: {:?}", res),
+        res = refresh_task => tracing::error!("Task aggiornamento terminato: {:?}", res),
     }
 
     Ok(())

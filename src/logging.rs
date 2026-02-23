@@ -30,7 +30,7 @@ pub fn init_logging() {
         registry.with(fmt_layer).init();
     }
 
-    tracing::info!(env = %env, "Logging system initialized");
+    tracing::info!(env = %env, "Sistema di logging inizializzato");
 }
 
 /// Debugging utility for tracking execution time of a block/future.
@@ -54,7 +54,7 @@ impl Drop for Timer {
         tracing::debug!(
             label = %self.label,
             duration_ms = %duration.as_millis(),
-            "Operation completed"
+            "Operazione completata"
         );
     }
 }

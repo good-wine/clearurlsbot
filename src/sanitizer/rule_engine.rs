@@ -93,14 +93,14 @@ impl RuleEngine {
     }
 
     pub async fn refresh(&self) -> Result<()> {
-        info!("Fetching rules from {}", self.source_url);
+        info!("Scaricamento regole da {}", self.source_url);
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()?;
         let resp = client.get(&self.source_url).send().await?.text().await?;
 
         let data: ClearUrlsData =
-            serde_json::from_str(&resp).context("Failed to parse ClearURLs JSON")?;
+            serde_json::from_str(&resp).context("Impossibile analizzare il JSON di ClearURLs")?;
 
         let mut compiled_providers = Vec::new();
 
@@ -135,19 +135,19 @@ impl RuleEngine {
             if let Ok(mut w) = self.providers.write() {
                 *w = compiled_providers;
             } else {
-                tracing::error!("Failed to acquire write lock for providers");
-                return Err(anyhow::anyhow!("Lock error"));
+                tracing::error!("Impossibile ottenere il lock in scrittura per i provider");
+                return Err(anyhow::anyhow!("Errore lock"));
             }
         }
 
-        info!("Loaded {} providers", count);
+        info!("Caricati {} provider", count);
         Ok(())
     }
 
     #[tracing::instrument(skip(self))]
     pub async fn expand_url(&self, input_url: &str) -> String {
         if let Some(cached) = self.cache.get(input_url).await {
-            tracing::debug!(url = %input_url, "Cache hit for URL expansion");
+            tracing::debug!(url = %input_url, "Cache hit per espansione URL");
             return cached;
         }
 
@@ -178,11 +178,11 @@ impl RuleEngine {
         let is_shortener = shorteners.iter().any(|s| url_lower.contains(s));
 
         if is_shortener {
-            tracing::debug!(url = %input_url, "Attempting to expand shortened URL");
+            tracing::debug!(url = %input_url, "Tentativo di espansione URL corto");
             if let Ok(resp) = client.head(input_url).send().await {
                 let final_url = resp.url().to_string();
                 if final_url != input_url {
-                    tracing::info!(original = %input_url, expanded = %final_url, "URL expanded successfully");
+                    tracing::info!(original = %input_url, expanded = %final_url, "URL espanso con successo");
                     self.cache
                         .insert(input_url.to_string(), final_url.clone())
                         .await;
@@ -242,7 +242,7 @@ impl RuleEngine {
         custom_rules: &[CustomRule],
         ignored_domains: &[String],
     ) -> Option<(String, String)> {
-        tracing::debug!(url = %self.redact_sensitive(text), "Starting sanitization");
+        tracing::debug!(url = %self.redact_sensitive(text), "Avvio sanitizzazione");
 
         let mut url_to_parse = text.to_string();
         if !url_to_parse.contains("://") && !url_to_parse.starts_with("mailto:") {
@@ -252,7 +252,7 @@ impl RuleEngine {
         if let Ok(mut url) = Url::parse(&url_to_parse) {
             if let Some(host) = url.host_str() {
                 if ignored_domains.iter().any(|d| host.contains(d)) {
-                    tracing::debug!(host = %host, "URL host is in ignored domains");
+                    tracing::debug!(host = %host, "Host URL in domini ignorati");
                     return None;
                 }
             }
@@ -276,7 +276,7 @@ impl RuleEngine {
                         if key.contains(&crule.pattern) {
                             keep = false;
                             custom_changed = true;
-                            tracing::debug!(param = %key, rule = %crule.pattern, "Custom rule matched");
+                            tracing::debug!(param = %key, rule = %crule.pattern, "Regola personalizzata trovata");
                             break;
                         }
                     }
@@ -301,7 +301,7 @@ impl RuleEngine {
                     for p in providers.iter() {
                         if p.url_pattern.is_match(text) {
                             provider_name = p.name.clone();
-                            tracing::debug!(provider = %provider_name, "Provider identified");
+                            tracing::debug!(provider = %provider_name, "Provider identificato");
                             break;
                         }
                     }
@@ -337,7 +337,7 @@ impl RuleEngine {
                 for (key, value) in query_pairs {
                     if aggressive_trackers.contains(&key.as_str()) {
                         aggressive_changed = true;
-                        tracing::debug!(param = %key, "Aggressive tracker stripped");
+                        tracing::debug!(param = %key, "Tracker rimosso (aggressivo)");
                         continue;
                     }
                     new_query.append_pair(&key, &value);
@@ -360,7 +360,7 @@ impl RuleEngine {
                     original = %self.redact_sensitive(text),
                     cleaned = %cleaned,
                     provider = %provider_name,
-                    "URL successfully cleaned"
+                    "URL pulito con successo"
                 );
                 return Some((cleaned, provider_name));
             }

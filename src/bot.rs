@@ -52,13 +52,13 @@ pub async fn handle_message(
     config: crate::config::Config,
     event_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
 ) -> ResponseResult<()> {
-    tracing::info!(chat_id = %msg.chat.id, msg_id = %msg.id, "Processing incoming message");
+    tracing::info!(chat_id = %msg.chat.id, msg_id = %msg.id, "Elaborazione messaggio in arrivo");
     let chat_id = msg.chat.id;
     let user_id = msg.from.as_ref().map_or(0, |u| i64::try_from(u.id.0).unwrap_or(0));
     tracing::Span::current().record("user_id", user_id);
 
     let user_config = db.get_user_config(user_id).await.unwrap_or_else(|e| {
-        tracing::error!(error = %e, "Failed to fetch user config, using default");
+        tracing::error!(error = %e, "Errore nel recupero config utente, uso default");
         UserConfig::default()
     });
 
@@ -93,13 +93,13 @@ pub async fn handle_message(
         let mut updated_config = user_config.clone();
         updated_config.language = lang_code.to_string();
         if let Err(e) = db.save_user_config(&updated_config).await {
-            tracing::warn!(error = %e, "Failed to save user language preference");
+            tracing::warn!(error = %e, "Errore nel salvataggio lingua utente");
         } else {
             tracing::debug!(
                 user_id = user_id,
                 old_lang = %user_config.language,
                 new_lang = lang_code,
-                "Updated user language preference"
+                "Preferenza lingua utente aggiornata"
             );
         }
     }
@@ -124,7 +124,7 @@ pub async fn handle_message(
         if let Ok(re) = Regex::new(url_pattern) {
             if re.is_match(text) {
                 has_urls = true;
-                tracing::debug!("URL detected via manual regex fallback");
+                tracing::debug!("URL rilevato tramite regex di fallback");
             }
         }
     }
@@ -146,7 +146,7 @@ pub async fn handle_message(
             if is_targeted {
                 match cmd {
                     "/start" => {
-                        tracing::info!("Handling /start command for user {}", user_id);
+                        tracing::info!("Gestione comando /start per utente {}", user_id);
                         handle_start_command(bot.clone(), chat_id, user_id, &tr, &config).await?;
                         return Ok(());
                     }
@@ -177,7 +177,7 @@ pub async fn handle_message(
         .get_chat_config_or_default(chat_id.0)
         .await
         .unwrap_or_else(|e| {
-            tracing::error!(error = %e, "Failed to fetch chat config, using default");
+            tracing::error!(error = %e, "Errore nel recupero config chat, uso default");
             crate::db::models::ChatConfig::default()
         });
 
@@ -220,7 +220,7 @@ pub async fn handle_message(
     };
 
     if !is_enabled {
-        tracing::info!(is_group_context, chat_id = %chat_id, "Bot is disabled for this context (skipping)");
+        tracing::info!(is_group_context, chat_id = %chat_id, "Bot disattivato per questo contesto (skip)");
         return Ok(());
     }
 
@@ -253,7 +253,7 @@ pub async fn handle_message(
                 _ => continue,
             };
             if !url_candidates.contains(&url_str) {
-                tracing::debug!(url = %url_str, "Found URL via Telegram entity");
+                tracing::debug!(url = %url_str, "URL trovato tramite entita' Telegram");
                 url_candidates.push(url_str);
             }
         }
@@ -265,14 +265,14 @@ pub async fn handle_message(
         for mat in re.find_iter(text) {
             let url_str = mat.as_str().to_string();
             if !url_candidates.contains(&url_str) {
-                tracing::debug!(url = %url_str, "Found URL via Regex fallback");
+                tracing::debug!(url = %url_str, "URL trovato tramite regex di fallback");
                 url_candidates.push(url_str);
             }
         }
     }
 
     if url_candidates.is_empty() {
-        tracing::debug!("No URL candidates found in message");
+        tracing::debug!("Nessun URL candidato trovato nel messaggio");
         return Ok(());
     }
 
@@ -288,7 +288,7 @@ pub async fn handle_message(
             rules.sanitize(&current_url, &custom_rules, &ignored_domains)
         {
             current_url = cleaned;
-            tracing::info!(provider = %provider, "URL sanitized by engine");
+            tracing::info!(provider = %provider, "URL pulito dal motore");
 
             if user_config.is_ai_enabled() && config.ai_api_key.is_some() {
                 if let Ok(Some(ai_cleaned)) = ai.sanitize(&current_url).await {
@@ -303,14 +303,14 @@ pub async fn handle_message(
                 original = %rules.redact_sensitive(&original_url_str),
                 cleaned = %current_url,
                 provider = %provider,
-                "URL sanitized by engine"
+                "URL pulito dal motore"
             );
             cleaned_urls.push((original_url_str, current_url, provider));
         } else {
-            tracing::debug!(url = %rules.redact_sensitive(&current_url), "URL was already clean");
+            tracing::debug!(url = %rules.redact_sensitive(&current_url), "URL gia' pulito");
             if user_config.is_ai_enabled() && config.ai_api_key.is_some() {
                 if let Ok(Some(ai_cleaned)) = ai.sanitize(&current_url).await {
-                    tracing::info!("URL sanitized by AI fallback");
+                    tracing::info!("URL pulito da fallback AI");
                     cleaned_urls.push((original_url_str, ai_cleaned, "AI (Deep Scan)".to_string()));
                 }
             }
@@ -318,7 +318,7 @@ pub async fn handle_message(
     }
 
     if cleaned_urls.is_empty() {
-        tracing::info!("Processing finished: no URLs required cleaning");
+        tracing::info!("Elaborazione completata: nessun URL da pulire");
         return Ok(());
     }
 
@@ -349,7 +349,7 @@ pub async fn handle_message(
         let user_name = msg
             .from
             .as_ref()
-            .map_or_else(|| "User".into(), |u| u.first_name.clone());
+            .map_or_else(|| tr.fallback_user.to_string(), |u| u.first_name.clone());
         let mut response = tr.cleaned_for.replace("{}", &html::escape(&user_name));
         for (_, cleaned, _) in &cleaned_urls {
             let escaped = html::escape(cleaned);
@@ -365,7 +365,7 @@ pub async fn handle_message(
         let user_name = msg
             .from
             .as_ref()
-            .map_or_else(|| "User".into(), |u| u.first_name.clone());
+            .map_or_else(|| tr.fallback_user.to_string(), |u| u.first_name.clone());
         tr.cleaned_for.replace("{}", &html::escape(&user_name))
     } else {
         String::from(tr.cleaned_links)
@@ -390,14 +390,14 @@ pub async fn handle_message(
             let link_entry = format!("• <a href=\"{escaped_url}\">{escaped_url}</a>\n");
 
             if response.len() + link_entry.len() > MAX_MESSAGE_LENGTH {
-                response.push_str("... (truncated)");
+                response.push_str(tr.truncated);
                 break;
             }
             response.push_str(&link_entry);
         }
     }
 
-    tracing::info!(chat_id = %chat_id, "Sending cleaned URLs reply");
+    tracing::info!(chat_id = %chat_id, "Invio risposta con URL puliti");
 
     let mut request = bot
         .send_message(chat_id, response)
@@ -410,7 +410,7 @@ pub async fn handle_message(
     }
 
     if let Err(e) = request.await {
-        tracing::error!(chat_id = %chat_id, error = %e, "Failed to send cleaned URLs reply");
+        tracing::error!(chat_id = %chat_id, error = %e, "Errore nell'invio della risposta con URL puliti");
         return Err(e);
     }
 
@@ -425,18 +425,15 @@ async fn handle_start_command(
     bot: Bot,
     chat_id: ChatId,
     user_id: i64,
-    _tr: &crate::i18n::Translations,
+    tr: &crate::i18n::Translations,
     _config: &crate::config::Config,
 ) -> ResponseResult<()> {
-    let welcome_text = format!(
-        "<b>Welcome to ClearURLs Manager!</b>\n\nYour User ID is: <code>{}</code>\n\nConfigure your preferences below:",
-        user_id
-    );
+    let welcome_text = tr.welcome.replace("{}", &user_id.to_string());
 
     // Create inline keyboard with settings button
     let keyboard = InlineKeyboardMarkup::new(vec![vec![
-        InlineKeyboardButton::callback("⚙️ Open Settings", format!("settings:{}", user_id)),
-        InlineKeyboardButton::callback("📊 View Stats", format!("user_setting:stats:{}", user_id)),
+        InlineKeyboardButton::callback(tr.start_open_settings, format!("settings:{}", user_id)),
+        InlineKeyboardButton::callback(tr.start_view_stats, format!("user_setting:stats:{}", user_id)),
     ]]);
 
     bot.send_message(chat_id, welcome_text)
@@ -647,8 +644,9 @@ async fn handle_user_settings_callback(
                 tr.s_ai_status_disabled 
             };
             let message = format!(
-                "<b>{}</b>\n\nAI Deep Scan is currently: <b>{}</b>\n\n{}",
+                "<b>{}</b>\n\n{} <b>{}</b>\n\n{}",
                 tr.s_ai_title,
+                tr.s_ai_current_status,
                 ai_status,
                 tr.s_ai_desc
             );
@@ -670,11 +668,16 @@ async fn handle_user_settings_callback(
             ])
         ),
         "links" => {
+            let mode_label = match user_config.mode.as_str() {
+                "reply" => tr.s_reply_mode,
+                "delete" => tr.s_delete_mode,
+                _ => user_config.mode.as_str(),
+            };
             let message = format!(
                 "<b>{}</b>\n\n{}: <b>{}</b>\n\n{}",
                 tr.s_links_title,
                 tr.s_action_mode,
-                user_config.mode,
+                mode_label,
                 tr.s_links_desc
             );
             let keyboard = InlineKeyboardMarkup::new(vec![

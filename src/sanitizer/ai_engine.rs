@@ -41,7 +41,7 @@ impl AiEngine {
             None => return Ok(None),
         };
 
-        debug!("Requesting AI sanitization for: {}", url);
+        debug!("Richiesta sanitizzazione AI per: {}", url);
 
         let prompt = format!(
             "You are a URL sanitizer. Remove all tracking parameters from the following URL. \n            Tracking parameters are things like utm_source, fbclid, gclid, etc., but also provider-specific ones. \n            Return ONLY the cleaned URL and nothing else. If the URL is already clean or no tracking is found, return the same URL. \n            URL: {}",
@@ -63,7 +63,7 @@ impl AiEngine {
 
         if !response.status().is_success() {
             let err = response.text().await?;
-            return Err(anyhow!("AI API error: {}", err));
+            return Err(anyhow!("Errore API AI: {}", err));
         }
 
         let data: Value = response.json().await?;
@@ -73,7 +73,7 @@ impl AiEngine {
 
         if let Some(cleaned_url) = cleaned {
             if cleaned_url != url {
-                debug!("AI cleaned URL: {} -> {}", url, cleaned_url);
+                debug!("AI ha pulito URL: {} -> {}", url, cleaned_url);
                 return Ok(Some(cleaned_url));
             }
         }
