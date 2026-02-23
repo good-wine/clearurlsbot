@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: clear-urls-api
+    env: docker
+    dockerCommand: clear_urls_bot
+    plan: starter
+    region: frankfurt
+    healthCheckPath: /health
+    domains:
+      - api.cub.goodwine.click
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: clear-urls-db
+          property: connectionString
+      - key: TELOXIDE_TOKEN
+        sync: false
+      - key: BOT_USERNAME
+        sync: false
+      - key: ADMIN_ID
+        sync: false
+      - key: RUST_LOG
+        value: info
+    autoDeploy: true
+
+databases:
+  - name: clear-urls-db
+    plan: free
+    region: frankfurt

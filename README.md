@@ -1,0 +1,166 @@
+# ClearURLs Telegram Bot 🛡️
+
+[![Rust](https://img.shields.io/badge/rust-1.92+-orange.svg)](https://www.rust-lang.org)
+[![Podman](https://img.shields.io/badge/Podman-supported-blue.svg)](https://podman.io)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+A modern, high-performance Rust-based Telegram bot that automatically removes tracking parameters from URLs. Built with the latest Rust toolchain and optimized for Podman containerization.
+
+## ✨ What's New
+
+**🚀 Major Modernization (v0.1.0+)**
+- ✅ Updated to Rust 1.92+ with optimized build configuration
+- ✅ Migrated from Docker to Podman for enhanced security
+- ✅ Fixed all deprecation warnings and modernized codebase
+- ✅ Optimized build times and runtime performance
+- ✅ Enhanced container security with rootless operation
+
+## 📖 Documentation
+
+- **[Architecture Guide](docs/ARCHITECTURE.md)**: Deep dive into the modular structure and data flow
+- **[Deployment Guide](docs/DEPLOYMENT.md)**: Complete deployment instructions for all environments
+- **[Contributing](CONTRIBUTING.md)**: How to set up development and submit changes
+- **[Changelog](CHANGELOG.md)**: History of releases and updates
+
+## 🌟 Key Features
+
+- **Smart Language Detection**: Automatically detects and responds in English or Italian based on message context and user settings
+- **Multi-Language Support**: Full i18n support for Italian and English
+- **Granular Control**: Per-chat configuration (Reply/Delete modes) and custom tracking parameter removal
+- **AI Deep Scan**: Optional AI-powered sanitization for complex tracking parameters not covered by standard rules
+- **Shortlink Expansion**: Automatically follows redirects from services like bit.ly or tinyurl to uncover and strip underlying trackers
+- **Deep Auditing**: Track which provider (Amazon, Google, etc.) cleaned each link
+- **Enterprise Ready**: Multi-stage Podman build, automatic configuration validation, and comprehensive security
+
+## 🛠️ Bot Commands
+
+- `/start` - Initial setup, shows your User ID
+- `/help` - Usage instructions and command list  
+- `/stats` - View your personal cleaning statistics in-chat
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Rust 1.92+** (minimum 1.75 supported)
+- **Podman** (recommended for deployment)
+- **PostgreSQL or SQLite** for database
+
+### 1. Clone & Configure
+
+```bash
+git clone https://github.com/yourusername/clear_urls_bot.git
+cd clear_urls_bot
+cp .env.example .env
+```
+
+Edit `.env` with your settings:
+```bash
+TELOXIDE_TOKEN=your_bot_token
+BOT_USERNAME=@your_bot_username
+ADMIN_ID=your_telegram_user_id
+COOKIE_KEY=random_32_character_string
+
+# Optional for AI Deep Scan
+AI_API_KEY=your_ai_api_key
+AI_API_BASE=https://api.openai.com/v1
+AI_MODEL=gpt-4
+```
+
+### 2. Run Locally
+
+```bash
+# Development build
+cargo run
+
+# Optimized release build
+cargo run --release
+```
+
+### 3. Deploy with Podman (Recommended)
+
+```bash
+# Using the deployment script (recommended)
+./podman-deploy.sh start
+
+# Or with podman-compose
+podman-compose -f podman-compose.yml up
+
+# Or manually
+podman build -t clear_urls_bot -f Containerfile .
+podman run -d --name clear_urls_bot --pod clear_urls_bot_pod -p 3000:3000 --env-file .env clear_urls_bot
+```
+
+## 🏗️ Technical Architecture
+
+### Core Technologies
+- **Language**: Rust 2021 Edition (MSRV 1.75+, tested on 1.92)
+- **Bot Framework**: Teloxide 0.17 with modern async patterns
+- **Database**: sqlx 0.8 with SQLite/PostgreSQL support
+- **Caching**: Moka 0.12 for high-performance caching
+- **Observability**: Comprehensive tracing with structured logging
+
+### Performance Optimizations
+- **Build**: Optimized LTO, single codegen unit, panic=abort for releases
+- **Runtime**: Async I/O, connection pooling, efficient caching strategies
+- **Memory**: Zero-copy patterns where possible, minimal allocations
+
+### Security Features
+- **Containerless**: Rootless Podman operation by default
+- **Least Privilege**: Non-root container execution
+- **Secure Defaults**: TLS-only, secure cookie handling, input validation
+
+## 🔧 Development
+
+```bash
+# Install dependencies
+cargo build
+
+# Run tests
+cargo test
+
+# Check code quality
+cargo clippy --all-targets
+cargo fmt --check
+
+# Build release (optimized)
+cargo build --release
+
+# Local development with auto-reload
+cargo install cargo-watch
+cargo watch -x run
+```
+
+## 📊 Monitoring & Observability
+
+The bot includes comprehensive observability:
+
+```bash
+# View logs
+podman logs -f clear_urls_bot
+
+# Check container status
+./podman-deploy.sh status
+
+# Monitor resource usage
+podman stats clear_urls_bot
+```
+
+## 🐳 Container Details
+
+- **Base Image**: debian:bookworm-slim (production)
+- **Multi-stage**: Optimized build with minimal runtime footprint
+- **Size**: ~80MB compressed, ~200MB uncompressed
+- **Security**: Non-root user, SELinux labeling, read-only filesystem where possible
+
+## 📝 License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## 🤝 Contributing
+
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
+
+**Note**: This bot has undergone significant modernization with improved performance, security, and maintainability. See the [CHANGELOG](CHANGELOG.md) for detailed updates.
