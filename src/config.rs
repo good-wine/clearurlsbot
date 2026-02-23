@@ -2,6 +2,13 @@ use anyhow::{Context, Result};
 use dotenvy::dotenv;
 use std::env;
 
+const DEFAULT_DATABASE_URL: &str = "sqlite:bot.db";
+const DEFAULT_PORT: &str = "3000";
+const DEFAULT_CLEARURLS_SOURCE: &str = "https://raw.githubusercontent.com/ClearURLs/Rules/refs/heads/master/data.min.json";
+const DEFAULT_AI_API_BASE: &str = "https://api.openai.com/v1";
+const DEFAULT_AI_MODEL: &str = "gpt-3.5-turbo";
+
+/// Configuration for the bot, loaded from environment variables.
 #[derive(Clone, Debug)]
 pub struct Config {
     pub bot_token: String,
@@ -16,6 +23,10 @@ pub struct Config {
 }
 
 impl Config {
+    /// Loads configuration from environment variables.
+    ///
+    /// # Errors
+    /// Returns an error if required environment variables are missing.
     pub fn from_env() -> Result<Self> {
         dotenv().ok();
 
@@ -24,8 +35,8 @@ impl Config {
         if bot_username.starts_with('@') {
             bot_username = bot_username[1..].to_string();
         }
-        let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:bot.db".to_string());
-        let port = env::var("PORT").unwrap_or_else(|_| "3000".to_string());
+        let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| DEFAULT_DATABASE_URL.to_string());
+        let port = env::var("PORT").unwrap_or_else(|_| DEFAULT_PORT.to_string());
         let server_addr = env::var("SERVER_ADDR").unwrap_or_else(|_| format!("0.0.0.0:{}", port));
 
         let admin_id = env::var("ADMIN_ID")
@@ -33,15 +44,11 @@ impl Config {
             .parse()
             .unwrap_or(0);
 
-        let clearurls_source = env::var("CLEARURLS_SOURCE").unwrap_or_else(|_| {
-            "https://raw.githubusercontent.com/ClearURLs/Rules/refs/heads/master/data.min.json"
-                .to_string()
-        });
+        let clearurls_source = env::var("CLEARURLS_SOURCE").unwrap_or_else(|_| DEFAULT_CLEARURLS_SOURCE.to_string());
 
-        let ai_api_key = env::var("AI_API_KEY").ok();
-        let ai_api_base =
-            env::var("AI_API_BASE").unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
-        let ai_model = env::var("AI_MODEL").unwrap_or_else(|_| "gpt-3.5-turbo".to_string());
+        let ai_api_key = env::var("AI_API_KEY").ok().filter(|s| !s.is_empty());
+        let ai_api_base = env::var("AI_API_BASE").unwrap_or_else(|_| DEFAULT_AI_API_BASE.to_string());
+        let ai_model = env::var("AI_MODEL").unwrap_or_else(|_| DEFAULT_AI_MODEL.to_string());
 
         Ok(Self {
             bot_token,
@@ -56,6 +63,10 @@ impl Config {
         })
     }
 
+    /// Validates the configuration.
+    ///
+    /// # Errors
+    /// Returns an error if validation fails.
     pub fn validate(&self) -> Result<()> {
         if self.bot_token.is_empty() || !self.bot_token.contains(':') {
             anyhow::bail!("FATAL: TELOXIDE_TOKEN non è valido o è vuoto. Controlla il file .env");

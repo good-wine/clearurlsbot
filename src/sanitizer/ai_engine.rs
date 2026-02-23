@@ -2,8 +2,12 @@ use crate::config::Config;
 use anyhow::{Result, anyhow};
 use reqwest::Client;
 use serde_json::{Value, json};
+use std::time::Duration;
 use tracing::debug;
 
+const AI_TIMEOUT_SECS: u64 = 30;
+
+/// AI-powered URL sanitization engine.
 #[derive(Clone)]
 pub struct AiEngine {
     client: Client,
@@ -13,15 +17,24 @@ pub struct AiEngine {
 }
 
 impl AiEngine {
+    /// Creates a new AI engine from configuration.
+    #[must_use]
     pub fn new(config: &Config) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .timeout(Duration::from_secs(AI_TIMEOUT_SECS))
+                .build()
+                .unwrap_or_else(|_| Client::new()),
             api_key: config.ai_api_key.clone(),
             api_base: config.ai_api_base.clone(),
             model: config.ai_model.clone(),
         }
     }
 
+    /// Attempts to sanitize a URL using AI.
+    ///
+    /// # Errors
+    /// Returns an error if the AI API request fails.
     pub async fn sanitize(&self, url: &str) -> Result<Option<String>> {
         let api_key = match &self.api_key {
             Some(key) => key,

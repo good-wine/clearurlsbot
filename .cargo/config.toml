@@ -1,0 +1,14 @@
+# Note: mold linker requires clang 12+ which is not available
+# Using default linker for now, but with optimizations
+
+# Parallel frontend (faster)
+[build]
+jobs = 8
+
+# Incremental compilation
+[profile.dev]
+incremental = true
+
+# Use sparse registry protocol for faster dependency downloads
+[registries.crates-io]
+protocol = "sparse"

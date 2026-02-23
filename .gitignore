@@ -1,7 +1,124 @@
+# ====================================
+# Rust / Cargo
+# ====================================
 /target
+**/target/
+Cargo.lock  # Uncomment if this is a library crate
+debug/
+*.pdb
+*.o
+*.rlib
+*.so
+*.dylib
+*.dll
+
+# ====================================
+# Database files (SQLite)
+# ====================================
 /bot.db
 /bot.db-shm
 /bot.db-wal
-.vercel
-.env*.local
+*.db
+*.db-shm
+*.db-wal
+
+# ====================================
+# Environment & Configuration
+# ====================================
 .env
+.env*.local
+.env.production
+.env.staging
+
+# ====================================
+# IDE & Editors
+# ====================================
+# VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# IntelliJ IDEA / RustRover / CLion
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Vim
+*.swp
+*.swo
+*~
+.*.sw[a-z]
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ====================================
+# Operating System
+# ====================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*
+
+# ====================================
+# Build & Distribution
+# ====================================
+dist/
+build/
+*.tar.gz
+*.zip
+
+# ====================================
+# Logs & Temporary files
+# ====================================
+*.log
+logs/
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
+# ====================================
+# Testing & Coverage
+# ====================================
+*.profraw
+*.profdata
+/coverage
+lcov.info
+tarpaulin-report.html
+cobertura.xml
+
+# ====================================
+# Deployment & Services
+# ====================================
+.vercel
+/render-build
+
+# ====================================
+# Misc
+# ====================================
+node_modules/
+.cache/

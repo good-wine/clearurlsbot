@@ -1,15 +1,14 @@
 use crate::db::models::CustomRule;
 use anyhow::{Context, Result};
 use moka::future::Cache;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, LazyLock, RwLock};
 use tracing::info;
 use url::Url;
 
-static SENSITIVE_PATTERNS: Lazy<HashMap<&'static str, Regex>> = Lazy::new(|| {
+static SENSITIVE_PATTERNS: LazyLock<HashMap<&'static str, Regex>> = LazyLock::new(|| {
     let mut m = HashMap::new();
     // Use \b (word boundary) instead of look-arounds
     m.insert(
