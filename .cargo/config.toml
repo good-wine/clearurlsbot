@@ -1,5 +1,7 @@
-# Note: mold linker requires clang 12+ which is not available
-# Using default linker for now, but with optimizations
+# Speed up compilation with mold linker
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=--ld-path=/usr/local/bin/mold"]
 
 # Parallel frontend (faster)
 [build]
