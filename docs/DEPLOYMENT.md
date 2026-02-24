@@ -31,13 +31,19 @@ This comprehensive guide covers all deployment scenarios for ClearURLs Bot, from
 ### Software Requirements
 
 **Core:**
-- [Rust](https://www.rust-lang.org/tools/install) 1.75+ (MSRV)
+- [Rust](https://www.rust-lang.org/tools/install) 1.85+ (MSRV)
 - [Podman](https://podman.io/getting-started/installation) 3.0+
 
 **Optional:**
 - [Podman Compose](https://github.com/containers/podman-compose) 1.0+
 - [PostgreSQL](https://www.postgresql.org/download/) 12+ (for production)
 - [Nginx](https://nginx.org/en/install.html) (for reverse proxy)
+
+### Novità
+- Gestione errori migliorata e logging avanzato
+- Modularità estesa (validazione, sanitizzazione, internazionalizzazione)
+- Test automatizzati e cache per performance
+- Internazionalizzazione dinamica via file JSON
 
 ## ⚙️ Environment Configuration
 

@@ -37,20 +37,44 @@ impl Config {
         if bot_username.starts_with('@') {
             bot_username = bot_username[1..].to_string();
         }
-        let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| DEFAULT_DATABASE_URL.to_string());
-        let port = env::var("PORT").unwrap_or_else(|_| DEFAULT_PORT.to_string());
-        let server_addr = env::var("SERVER_ADDR").unwrap_or_else(|_| format!("0.0.0.0:{}", port));
+        let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
+            log::error!("DATABASE_URL non trovato, uso default.");
+            DEFAULT_DATABASE_URL.to_string()
+        });
+        let port = env::var("PORT").unwrap_or_else(|_| {
+            log::error!("PORT non trovato, uso default.");
+            DEFAULT_PORT.to_string()
+        });
+        let server_addr = env::var("SERVER_ADDR").unwrap_or_else(|_| {
+            log::error!("SERVER_ADDR non trovato, uso default.");
+            format!("0.0.0.0:{}", port)
+        });
 
         let admin_id = env::var("ADMIN_ID")
-            .unwrap_or_else(|_| "0".to_string())
+            .unwrap_or_else(|_| {
+                log::error!("BOT_USERNAME non trovato, uso '0'.");
+                "0".to_string()
+            })
             .parse()
-            .unwrap_or(0);
+            .unwrap_or_else(|_| {
+                log::error!("INLINE_MAX_RESULTS non trovato, uso 0.");
+                0
+            });
 
-        let clearurls_source = env::var("CLEARURLS_SOURCE").unwrap_or_else(|_| DEFAULT_CLEARURLS_SOURCE.to_string());
+        let clearurls_source = env::var("CLEARURLS_SOURCE").unwrap_or_else(|_| {
+            log::error!("CLEARURLS_SOURCE non trovato, uso default.");
+            DEFAULT_CLEARURLS_SOURCE.to_string()
+        });
 
         let ai_api_key = env::var("AI_API_KEY").ok().filter(|s| !s.is_empty());
-        let ai_api_base = env::var("AI_API_BASE").unwrap_or_else(|_| DEFAULT_AI_API_BASE.to_string());
-        let ai_model = env::var("AI_MODEL").unwrap_or_else(|_| DEFAULT_AI_MODEL.to_string());
+        let ai_api_base = env::var("AI_API_BASE").unwrap_or_else(|_| {
+            log::error!("AI_API_BASE non trovato, uso default.");
+            DEFAULT_AI_API_BASE.to_string()
+        });
+        let ai_model = env::var("AI_MODEL").unwrap_or_else(|_| {
+            log::error!("AI_MODEL non trovato, uso default.");
+            DEFAULT_AI_MODEL.to_string()
+        });
         let inline_max_results = env::var("INLINE_MAX_RESULTS")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())

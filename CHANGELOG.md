@@ -1,3 +1,13 @@
+## [1.3.0] - 2026-02-24
+
+### 🛠 Migliorie principali
+- Gestione errori esplicita e logging avanzato
+- Modularità estesa: funzioni di sanitizzazione e validazione in moduli dedicati
+- Test automatizzati aggiunti per validazione input/output
+- Ottimizzazione performance con cache
+- Sicurezza input/output rafforzata
+- Internazionalizzazione dinamica tramite file JSON
+- Documentazione aggiornata
 # Changelog
 
 All notable changes to this project will be documented in this file.

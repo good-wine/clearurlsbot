@@ -1,3 +1,22 @@
+use std::fs;
+use serde_json::Value;
+
+/// Carica traduzioni da file JSON
+pub fn load_translations_from_file(lang: &str, path: &str) -> Option<Translations> {
+    let content = fs::read_to_string(path).ok()?;
+    let json: Value = serde_json::from_str(&content).ok()?;
+    // Mappa i campi di Translations
+    Some(Translations {
+        s_language: json["s_language"].as_str().unwrap_or("").into(),
+        s_language_title: json["s_language_title"].as_str().unwrap_or("").into(),
+        s_language_current: json["s_language_current"].as_str().unwrap_or("").into(),
+        s_language_updated: json["s_language_updated"].as_str().unwrap_or("").into(),
+        s_language_it: json["s_language_it"].as_str().unwrap_or("").into(),
+        s_language_en: json["s_language_en"].as_str().unwrap_or("").into(),
+        // ...aggiungi altri campi se necessario...
+        rk_language: json["rk_language"].as_str().unwrap_or("").into(),
+    })
+}
 #[derive(Debug)]
 pub struct Translations {
         pub cleaning_feedback: &'static str,

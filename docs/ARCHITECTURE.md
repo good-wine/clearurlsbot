@@ -5,28 +5,22 @@ This project is designed with modularity, performance, and security in mind, sup
 ## 📦 Component Structure
 
 ### 1. Core Library (`src/lib.rs`)
-The backbone of the application with a modular architecture:
+Il progetto è ora ancora più modulare e robusto:
 - **Sanitizer Module** (`src/sanitizer/`):
-  - `rule_engine.rs`: Regex-based URL processing engine with sensitive data redaction
-  - `ai_engine.rs`: Optional LLM-powered deep-scan for complex tracking parameters
-  - Includes URL expansion to uncover hidden trackers in shortened links
+  - `rule_engine.rs`: Motore regex per la pulizia URL e redazione dati sensibili
+  - `ai_engine.rs`: Analisi AI per parametri complessi
+  - `validation.rs`: Validazione input/output con cache
 - **Database Module** (`src/db/`):
-  - `implementation.rs`: Database abstraction layer using **sqlx::Any**
-  - `models.rs`: Data models for users, chats, cleaned links, and custom rules
-  - Dynamic backend detection supporting both **PostgreSQL** and **SQLite**
-- **Bot Module** (`src/bot.rs`): 
-  - Modern Telegram bot handler using Teloxide with ReplyParameters
-  - Smart language detection and internationalization
-  - Efficient async message processing with proper error handling
-- **AI Module** (`src/ai_sanitizer.rs` → `src/sanitizer/ai_engine.rs`):
-  - Integrated AI-powered URL sanitization
-  - Configurable model selection and API endpoints
-- **Configuration** (`src/config.rs`):
-  - Environment-based configuration with validation
-  - Secure handling of sensitive data
-- **Internationalization** (`src/i18n.rs`):
-  - Multi-language support for English and Italian
-  - Context-aware language detection
+  - `implementation.rs`: Layer di astrazione DB con sqlx
+  - `models.rs`: Modelli dati con supporto lingua
+- **Bot Module** (`src/bot.rs`):
+  - Handler Telegram moderno, gestione errori migliorata
+- **Configurazione** (`src/config.rs`):
+  - Gestione errori esplicita, logging avanzato
+- **Internazionalizzazione** (`src/i18n.rs`):
+  - Supporto multilingua estendibile via file JSON
+  - Rilevamento lingua contestuale
+  - Caricamento dinamico traduzioni
 
 ### 2. Application Entry Point (`src/main.rs`)
 Optimized initialization sequence:

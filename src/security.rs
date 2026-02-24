@@ -21,7 +21,13 @@ impl RateLimiter {
 
     /// Returns true if allowed, false if rate-limited
     pub fn check(&self, user_id: i64) -> bool {
-        let mut users = self.users.lock().unwrap();
+        let mut users = match self.users.lock() {
+            Ok(u) => u,
+            Err(e) => {
+                log::error!("Errore nel lock users: {}", e);
+                return;
+            }
+        };
         let now = Instant::now();
         match users.get(&user_id) {
             Some(last) if now.duration_since(*last) < self.min_interval => false,
@@ -36,15 +42,24 @@ impl RateLimiter {
 /// Global rate limiter instance (1 request/sec per user)
 pub static RATE_LIMITER: Lazy<RateLimiter> = Lazy::new(|| RateLimiter::new(Duration::from_secs(1)));
 
-/// Sanitizes user input (basic, extend as needed)
-pub fn sanitize_input(input: &str) -> String {
-    // Remove control chars, trim, limit length
-    let mut s = input.trim().replace(|c: char| c.is_control(), "");
-    if s.len() > 4000 {
-        s.truncate(4000);
+mod input_sanitizer {
+    /// Sanitizza l'input utente (base, estendibile)
+        use crate::sanitizer::validation::is_valid_url;
+    
+        pub fn sanitize(input: &str) -> String {
+            let mut s = input.trim().replace(|c: char| c.is_control(), "");
+            if s.len() > 4000 {
+                s.truncate(4000);
+            }
+            if !is_valid_url(&s) {
+                log::error!("Input non valido: {}", s);
+                return String::new();
+            }
+            s
     }
-    s
 }
+
+pub use input_sanitizer::sanitize as sanitize_input;
 
 /// Checks if a user is admin
 pub fn is_admin(user_id: i64, admin_id: i64) -> bool {
