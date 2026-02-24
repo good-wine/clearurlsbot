@@ -2,6 +2,7 @@ use crate::{
     db::{Db, models::UserConfig},
     i18n,
     sanitizer::{AiEngine, RuleEngine},
+    security::{RATE_LIMITER, sanitize_input, is_admin},
 };
 use regex::Regex;
 use teloxide::prelude::*;
@@ -48,8 +49,12 @@ pub async fn handle_inline_query(
     ai: AiEngine,
     config: crate::config::Config,
 ) -> ResponseResult<()> {
-    let query = q.query.trim();
     let user_id = i64::try_from(q.from.id.0).unwrap_or(0);
+    // Rate limiting anti-flood
+    if !RATE_LIMITER.check(user_id) {
+        return Ok(()); // Silenziosamente ignora richieste flood
+    }
+    let query = sanitize_input(q.query.trim());
     let lang_code = get_user_language(&db, user_id, q.from.language_code.as_deref()).await;
 
     if query.is_empty() {
@@ -214,6 +219,10 @@ pub async fn handle_message(
     let chat_id = msg.chat.id;
     let user_id = msg.from.as_ref().map_or(0, |u| i64::try_from(u.id.0).unwrap_or(0));
     tracing::Span::current().record("user_id", user_id);
+    // Rate limiting anti-flood
+    if !RATE_LIMITER.check(user_id) {
+        return Ok(()); // Silenziosamente ignora richieste flood
+    }
 
     let user_config = db.get_user_config(user_id).await.unwrap_or_else(|e| {
         tracing::error!(error = %e, "Errore nel recupero config utente, uso default");
@@ -222,9 +231,9 @@ pub async fn handle_message(
 
     // 1. Detect URLs early
     let (text, entities) = if let Some(t) = msg.text() {
-        (t, msg.entities())
+        (sanitize_input(t), msg.entities())
     } else if let Some(c) = msg.caption() {
-        (c, msg.caption_entities())
+        (sanitize_input(c), msg.caption_entities())
     } else {
         ("", None)
     };
@@ -756,17 +765,22 @@ async fn handle_callback(
     db: Db,
     config: crate::config::Config,
 ) -> ResponseResult<()> {
-    let callback_data = q.data.as_deref().unwrap_or("");
+    let user_id = q.from.id.0 as i64;
+    // Rate limiting anti-flood anche sulle callback
+    if !RATE_LIMITER.check(user_id) {
+        return Ok(());
+    }
+    let callback_data = sanitize_input(q.data.as_deref().unwrap_or(""));
     let chat_id = q
         .message
         .as_ref()
         .map(teloxide::types::MaybeInaccessibleMessage::chat)
         .map(|chat| chat.id);
+    // message_id deve essere sempre propagato per editare il messaggio originale
     let message_id = q
         .message
         .as_ref()
         .map(teloxide::types::MaybeInaccessibleMessage::id);
-    let user_id = q.from.id.0 as i64;
 
     // Get user's preferred language
     let telegram_lang = q.from.language_code.as_deref();
@@ -852,6 +866,7 @@ async fn handle_callback(
 }
 
 async fn handle_settings_callback(
+    // message_id deve essere sempre quello della callback per editare il messaggio
     bot: Bot,
     chat_id: ChatId,
     message_id: Option<MessageId>,
@@ -926,9 +941,8 @@ async fn handle_settings_callback(
 
     let keyboard = InlineKeyboardMarkup::new(keyboard_rows);
 
-    upsert_settings_view(&bot, chat_id, message_id, settings_text, Some(keyboard), true).await?;
-
-    Ok(())
+    // Risposta atomica: una sola edit/send
+    upsert_settings_view(&bot, chat_id, message_id, settings_text, Some(keyboard), true).await
 }
 
 async fn handle_quick_callback(
@@ -954,7 +968,7 @@ async fn handle_quick_callback(
 
     match parts[1] {
         "settings" => {
-            handle_settings_callback(bot, chat_id, message_id, user_id, db, config, tr).await?;
+            handle_settings_callback(bot, chat_id, message_id, user_id, db, config, tr).await
         }
         "stats" => {
             let user_config = db.get_user_config(user_id).await.unwrap_or_default();
@@ -969,7 +983,7 @@ async fn handle_quick_callback(
                 Some(quick_actions_inline_keyboard(tr, user_id)),
                 true,
             )
-            .await?;
+            .await
         }
         "help" => {
             upsert_settings_view(
@@ -980,7 +994,7 @@ async fn handle_quick_callback(
                 Some(quick_actions_inline_keyboard(tr, user_id)),
                 true,
             )
-            .await?;
+            .await
         }
         "language" => {
             let user_config = db.get_user_config(user_id).await.unwrap_or_default();
@@ -998,15 +1012,14 @@ async fn handle_quick_callback(
                 Some(language_inline_keyboard(tr, user_id)),
                 true,
             )
-            .await?;
+            .await
         }
-        _ => {}
+        _ => Ok(())
     }
-
-    Ok(())
 }
 
 async fn handle_user_settings_callback(
+    // message_id deve essere sempre quello della callback per editare il messaggio
     bot: Bot,
     chat_id: ChatId,
     message_id: Option<MessageId>,
@@ -1218,6 +1231,7 @@ async fn handle_user_settings_callback(
 }
 
 async fn handle_admin_settings_callback(
+    // message_id deve essere sempre quello della callback per editare il messaggio
     bot: Bot,
     chat_id: ChatId,
     message_id: Option<MessageId>,

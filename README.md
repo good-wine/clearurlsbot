@@ -116,6 +116,16 @@ podman run -d --name clear_urls_bot --pod clear_urls_bot_pod -p 3000:3000 --env-
 - **Least Privilege**: Non-root container execution
 - **Secure Defaults**: TLS-only, secure cookie handling, input validation
 
+## 🔒 Security Best Practices
+
+- Tutti gli input utente sono validati e sanificati lato bot.
+- Rate limiting anti-flood: massimo 1 richiesta/secondo per utente.
+- Le azioni amministrative sono protette da controllo su `ADMIN_ID`.
+- Nessun dato sensibile (token, chiavi, dati personali) viene mai loggato.
+- Le variabili di ambiente `.env` devono avere permessi restrittivi (`chmod 600 .env`).
+- I log oscurano dati sensibili tramite redazione automatica.
+- Consigliato eseguire il bot in container rootless (Podman) e usare database PostgreSQL in produzione.
+
 ## 🔧 Development
 
 ```bash

@@ -109,6 +109,16 @@ DATABASE_URL=postgresql://username:password@localhost:5432/clearurls_bot
    cp .env.example .env.prod
    ```
 
+### Security Best Practices
+
+1. Tutti gli input utente sono validati e sanificati lato bot.
+2. Rate limiting anti-flood: massimo 1 richiesta/secondo per utente.
+3. Le azioni amministrative sono protette da controllo su `ADMIN_ID`.
+4. Nessun dato sensibile (token, chiavi, dati personali) viene mai loggato.
+5. Le variabili di ambiente `.env` devono avere permessi restrittivi (`chmod 600 .env`).
+6. I log oscurano dati sensibili tramite redazione automatica.
+7. Consigliato eseguire il bot in container rootless (Podman) e usare database PostgreSQL in produzione.
+
 ## 🏠 Local Development
 
 ### Quick Start
