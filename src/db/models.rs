@@ -10,6 +10,7 @@ pub struct UserConfig {
     pub ignored_domains: String, // Comma-separated list
     pub cleaned_count: i64,
     pub language: String, // "en", "it", etc.
+    pub privacy_mode: i32, // 1=enabled, 0=disabled
 }
 
 impl UserConfig {
@@ -31,6 +32,7 @@ impl Default for UserConfig {
             ignored_domains: String::new(),
             cleaned_count: 0,
             language: "en".to_string(),
+            privacy_mode: 0,
         }
     }
 }

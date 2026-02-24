@@ -119,6 +119,21 @@ DATABASE_URL=postgresql://username:password@localhost:5432/clearurls_bot
 6. I log oscurano dati sensibili tramite redazione automatica.
 7. Consigliato eseguire il bot in container rootless (Podman) e usare database PostgreSQL in produzione.
 
+## 🛡️ Sicurezza e Best Practice
+
+- Rate limiting anti-flood: massimo 1 richiesta/secondo per utente
+- Validazione e sanificazione input su tutti i messaggi/callback
+- Controllo permessi sistematico per azioni admin
+- Protezione dati sensibili nei log e nelle variabili di ambiente
+- Consigliato eseguire il bot in container rootless (Podman) e usare database PostgreSQL in produzione
+- Backup automatico DB: script backup_db.sh, cron consigliato
+- Logging avanzato: solo admin riceve log critici via Telegram
+- Notifiche automatiche errori: messaggio all’admin in caso di panic/errori
+- Caching risultati pulizia: cache interna per URL ripetuti
+- Ottimizzazione DB/async: query asincrone, pooling, batch
+- Webhook HTTPS: pronto per refactor, supporto via env
+- Integrazione VirusTotal: controllo link sospetti, avviso all’utente
+
 ## 🏠 Local Development
 
 ### Quick Start

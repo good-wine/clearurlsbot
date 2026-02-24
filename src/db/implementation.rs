@@ -88,12 +88,20 @@ impl Db {
                 .execute(&self.pool)
                 .await?;
             }
+            if !cols.contains(&"privacy_mode".to_string()) {
+                sqlx::query(
+                    "ALTER TABLE user_configs ADD COLUMN privacy_mode INTEGER NOT NULL DEFAULT 0",
+                )
+                .execute(&self.pool)
+                .await?;
+            }
         } else {
             // Postgres migration logic
             sqlx::query("ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS ai_enabled BOOLEAN NOT NULL DEFAULT FALSE").execute(&self.pool).await?;
             sqlx::query("ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS ignored_domains TEXT NOT NULL DEFAULT ''").execute(&self.pool).await?;
             sqlx::query("ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS cleaned_count BIGINT NOT NULL DEFAULT 0").execute(&self.pool).await?;
             sqlx::query("ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'en'").execute(&self.pool).await?;
+            sqlx::query("ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS privacy_mode BOOLEAN NOT NULL DEFAULT FALSE").execute(&self.pool).await?;
         }
 
         let create_chat_configs = if is_sqlite {

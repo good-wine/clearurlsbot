@@ -1,5 +1,10 @@
 #[derive(Debug)]
 pub struct Translations {
+        pub cleaning_feedback: &'static str,
+        pub error_feedback: &'static str,
+        pub privacy_mode_enabled: &'static str,
+        pub privacy_mode_disabled: &'static str,
+        pub privacy_mode_desc: &'static str,
     pub welcome: &'static str,
     pub help_text: &'static str,
     pub unknown_command: &'static str,
@@ -108,6 +113,16 @@ pub struct Translations {
 pub fn get_translations(lang: &str) -> Translations {
     match lang {
         "it" => Translations {
+                        cleaning_feedback: "🧹 Sto pulendo il link...",
+                        error_feedback: "❌ Errore durante la pulizia. Riprova o segnala all'admin.",
+                        privacy_mode_enabled: "🔒 Modalità privacy attivata: la cronologia non verrà salvata.",
+                        privacy_mode_disabled: "🔓 Modalità privacy disattivata: la cronologia verrà salvata normalmente.",
+                        privacy_mode_desc: "La modalità privacy impedisce al bot di salvare la cronologia dei link puliti. Puoi attivarla dalle impostazioni.",
+                        cleaning_feedback: "🧹 Cleaning link...",
+                        error_feedback: "❌ Error during cleaning. Please retry or contact admin.",
+                        privacy_mode_enabled: "🔒 Privacy mode enabled: history will not be saved.",
+                        privacy_mode_disabled: "🔓 Privacy mode disabled: history will be saved normally.",
+                        privacy_mode_desc: "Privacy mode prevents the bot from saving cleaned link history. You can enable it from settings.",
             welcome: "<b>Benvenuto nel gestore ClearURLs!</b>\n\nIl tuo ID utente è: <code>{}</code>\n\nPuoi configurare il bot e gestire i tuoi link puliti direttamente dal dashboard web protetto.",
             help_text: "<b>Guida ClearURLs Bot</b> 🛡️\n\nQuesto bot rimuove automaticamente i parametri di tracciamento dai link che invii.\n\n<b>Comandi:</b>\n/start - Inizia e ricevi il link al dashboard\n/help - Mostra questo messaggio\n/menu - Mostra la tastiera rapida\n/hidekbd - Nascondi la tastiera rapida\n/settings - Apri il menu impostazioni (Inline Keyboard)\n/stats - Visualizza le tue statistiche di pulizia\n\nPuoi usarmi in chat privata o aggiungermi ai gruppi!",
             unknown_command: "❓ Comando non riconosciuto. Usa /help per la lista comandi.",

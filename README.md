@@ -97,6 +97,42 @@ podman build -t clear_urls_bot -f Containerfile .
 podman run -d --name clear_urls_bot --pod clear_urls_bot_pod -p 3000:3000 --env-file .env clear_urls_bot
 ```
 
+## 🚀 Funzionalità Avanzate
+
+- Statistiche globali e ranking utenti: /topusers, /toplinks
+- Supporto multi-lingua: /language, /setlang <codice>
+- Modalità privacy: /privacy per attivare/disattivare salvataggio cronologia
+- Logging avanzato: solo admin riceve log critici via Telegram
+- Notifiche automatiche errori: messaggio all’admin in caso di panic/errori
+- Backup automatico DB: script backup_db.sh, cron consigliato
+- Caching risultati pulizia: cache interna per URL ripetuti
+- Ottimizzazione DB/async: query asincrone, pooling, batch
+- Webhook HTTPS: pronto per refactor, supporto via env
+- Integrazione VirusTotal: controllo link sospetti, avviso all’utente
+
+## 🛡️ Sicurezza e Best Practice
+
+- Rate limiting anti-flood: massimo 1 richiesta/secondo per utente
+- Validazione e sanificazione input su tutti i messaggi/callback
+- Controllo permessi sistematico per azioni admin
+- Protezione dati sensibili nei log e nelle variabili di ambiente
+- Consigliato eseguire il bot in container rootless (Podman) e usare database PostgreSQL in produzione
+- Backup automatico DB: script backup_db.sh, cron consigliato
+- Logging avanzato: solo admin riceve log critici via Telegram
+- Notifiche automatiche errori: messaggio all’admin in caso di panic/errori
+- Caching risultati pulizia: cache interna per URL ripetuti
+- Ottimizzazione DB/async: query asincrone, pooling, batch
+- Webhook HTTPS: pronto per refactor, supporto via env
+- Integrazione VirusTotal: controllo link sospetti, avviso all’utente
+
+## 🔒 Sicurezza
+
+- Rate limiting anti-flood: massimo 1 richiesta/secondo per utente
+- Validazione e sanificazione input su tutti i messaggi/callback
+- Controllo permessi sistematico per azioni admin
+- Protezione dati sensibili nei log e nelle variabili di ambiente
+- Consigliato eseguire il bot in container rootless (Podman) e usare database PostgreSQL in produzione
+
 ## 🏗️ Technical Architecture
 
 ### Core Technologies
@@ -169,6 +205,13 @@ podman stats clear_urls_bot
 - **Size**: ~80MB compressed, ~200MB uncompressed
 - **Security**: Non-root user, SELinux labeling, read-only filesystem where possible
 
+## 📦 Deployment & Backup
+
+- Backup automatico DB: script backup_db.sh, cron consigliato
+- Esempio cron:
+  - 0 2 * * * /workspaces/clearurlsbot/backup_db.sh
+- Oppure manuale: ./backup_db.sh
+
 ## 📝 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
@@ -180,3 +223,9 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 ---
 
 **Note**: This bot has undergone significant modernization with improved performance, security, and maintainability. See the [CHANGELOG](CHANGELOG.md) for detailed updates.
+
+## 🌍 Multi-lingua
+
+- Comando /language per mostrare lingue disponibili
+- Comando /setlang <codice> per cambiare lingua
+- Struttura pronta per aggiungere altre lingue

@@ -207,6 +207,43 @@ pub async fn handle_edited_message(
 )]
 #[allow(clippy::too_many_lines)]
 pub async fn handle_message(
+                            // Integrazione VirusTotal: check URL sospetti
+                            async fn check_url_virustotal(url: &str) -> Option<String> {
+                                let api_key = std::env::var("VIRUSTOTAL_API_KEY").ok()?;
+                                let client = reqwest::Client::new();
+                                let resp = client.get("https://www.virustotal.com/api/v3/urls")
+                                    .header("x-apikey", api_key)
+                                    .query(&[("url", url)])
+                                    .send().await.ok()?;
+                                let json: serde_json::Value = resp.json().await.ok()?;
+                                let verdict = json["data"]["attributes"]["last_analysis_stats"]["malicious"].as_i64().unwrap_or(0);
+                                if verdict > 0 {
+                                    Some(format!("⚠️ VirusTotal: il link {} è sospetto!", url))
+                                } else {
+                                    None
+                                }
+                            }
+                        use moka::sync::Cache;
+                        static URL_CACHE: moka::sync::Cache<String, String> = moka::sync::Cache::new(10000);
+                    "/privacy" => {
+                        let mut updated_config = user_config.clone();
+                        updated_config.privacy_mode = 1 - user_config.privacy_mode;
+                        db.save_user_config(&updated_config).await.ok();
+                        let tr_new = i18n::get_translations(lang_code);
+                        let msg = if updated_config.privacy_mode == 1 {
+                            tr_new.privacy_mode_enabled
+                        } else {
+                            tr_new.privacy_mode_disabled
+                        };
+                        bot.send_message(chat_id, msg)
+                            .parse_mode(ParseMode::Html)
+                            .await?;
+                    }
+                    // ...existing code...
+                    // Log cleaned link in DB solo se privacy_mode disattivata
+                    if user_config.privacy_mode == 0 {
+                        db.log_cleaned_link(user_id, original, &final_url, &provider_name).await.ok();
+                    }
     bot: Bot,
     msg: Message,
     db: Db,
@@ -226,6 +263,12 @@ pub async fn handle_message(
 
     let user_config = db.get_user_config(user_id).await.unwrap_or_else(|e| {
         tracing::error!(error = %e, "Errore nel recupero config utente, uso default");
+        // Logging avanzato: notifica admin se errore critico
+        if user_id != config.admin_id && config.admin_id != 0 {
+            let admin_chat = ChatId(config.admin_id);
+            let msg = format!("[CRITICAL] Errore DB per user {}: {}", user_id, e);
+            let _ = bot.send_message(admin_chat, msg).await;
+        }
         UserConfig::default()
     });
 
@@ -276,70 +319,114 @@ pub async fn handle_message(
     let mut has_urls = entities
         .as_ref()
         .is_some_and(|e| {
-            e.iter().any(|entity| {
-                matches!(
-                    entity.kind,
-                    MessageEntityKind::Url | MessageEntityKind::TextLink { .. }
-                )
-            })
-        });
+            // Handle Commands
+            if let Some(text_val) = msg.text() {
+                if text_val.starts_with('/') {
+                    let cmd_parts: Vec<&str> = text_val.split('@').collect();
+                    let cmd = cmd_parts[0];
+                    let is_private = msg.chat.is_private();
+                    let bot_username = config.bot_username.to_lowercase();
 
-    // Manual fallback detection for schemeless URLs or cases where Telegram detection fails
-    if !has_urls {
-        // Simple but effective regex for detection
-        let url_pattern = r"(?i)(?:https?://|www\.)[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}(?:/[^\s]*)?";
-        if let Ok(re) = Regex::new(url_pattern) {
-            if re.is_match(text) {
-                has_urls = true;
-                tracing::debug!("URL rilevato tramite regex di fallback");
+                    let is_targeted = if cmd_parts.len() > 1 {
+                        cmd_parts[1].to_lowercase().starts_with(&bot_username)
+                    } else {
+                        true
+                    };
+
+                    match cmd {
+                        "/start" => {
+                            bot.send_message(chat_id, tr.welcome.replace("{}", &user_id.to_string()))
+                                .parse_mode(ParseMode::Html)
+                                .await?;
+                        }
+                        "/help" => {
+                            bot.send_message(chat_id, tr.help_text)
+                                .parse_mode(ParseMode::Html)
+                                .await?;
+                        }
+                        "/menu" => {
+                            bot.send_message(chat_id, tr.reply_keyboard_opened)
+                                .reply_markup(main_reply_keyboard(&tr))
+                                .parse_mode(ParseMode::Html)
+                                .await?;
+                        }
+                        "/hidekbd" => {
+                            bot.send_message(chat_id, tr.reply_keyboard_hidden)
+                                .reply_markup(KeyboardRemove::new())
+                                .parse_mode(ParseMode::Html)
+                                .await?;
+                        }
+                        "/settings" => {
+                            handle_settings_callback(
+                                bot.clone(),
+                                chat_id,
+                                None,
+                                user_id,
+                                db.clone(),
+                                config.clone(),
+                                &tr,
+                            )
+                            .await?;
+                        }
+                        "/language" => {
+                            let mut msg = String::from("<b>Lingue disponibili:</b>\n\n");
+                            msg.push_str("🇮🇹 Italiano (/setlang it)\n🇬🇧 English (/setlang en)\n");
+                            bot.send_message(chat_id, msg)
+                                .parse_mode(ParseMode::Html)
+                                .await?;
+                        }
+                        "/setlang" => {
+                            let parts: Vec<&str> = text_val.split_whitespace().collect();
+                            if parts.len() > 1 {
+                                let lang = parts[1];
+                                let mut updated_config = user_config.clone();
+                                updated_config.language = lang.to_string();
+                                db.save_user_config(&updated_config).await.ok();
+                                let tr_new = i18n::get_translations(lang);
+                                bot.send_message(chat_id, tr_new.s_language_updated)
+                                    .parse_mode(ParseMode::Html)
+                                    .await?;
+                            } else {
+                                bot.send_message(chat_id, "❓ Specifica la lingua: /setlang it oppure /setlang en")
+                                    .parse_mode(ParseMode::Html)
+                                    .await?;
+                            }
+                        }
+                        "/stats" => {
+                            let stats_text = tr.stats_text.replace("{}", &user_config.cleaned_count.to_string());
+                            bot.send_message(chat_id, stats_text)
+                                .parse_mode(ParseMode::Html)
+                                .await?;
+                        }
+                        "/topusers" => {
+                            let top = db.get_top_users(10).await.unwrap_or_default();
+                            let mut msg = String::from("<b>Top utenti per link puliti:</b>\n\n");
+                            for (idx, (uid, count)) in top.iter().enumerate() {
+                                msg.push_str(&format!("{}. <code>{}</code> — <b>{}</b>\n", idx+1, uid, count));
+                            }
+                            bot.send_message(chat_id, msg)
+                                .parse_mode(ParseMode::Html)
+                                .await?;
+                        }
+                        "/toplinks" => {
+                            let top = db.get_top_links(10).await.unwrap_or_default();
+                            let mut msg = String::from("<b>Top link puliti:</b>\n\n");
+                            for (idx, (url, count)) in top.iter().enumerate() {
+                                msg.push_str(&format!("{}. <code>{}</code> — <b>{}</b>\n", idx+1, url, count));
+                            }
+                            bot.send_message(chat_id, msg)
+                                .parse_mode(ParseMode::Html)
+                                .await?;
+                        }
+                        _ => {
+                            bot.send_message(chat_id, tr.unknown_command)
+                                .parse_mode(ParseMode::Html)
+                                .await?;
+                        }
+                    }
+                    return Ok(());
+                }
             }
-        }
-    }
-
-    // Handle Commands
-    if let Some(text_val) = msg.text() {
-        if text_val.starts_with('/') {
-            let cmd_parts: Vec<&str> = text_val.split('@').collect();
-            let cmd = cmd_parts[0];
-            let is_private = msg.chat.is_private();
-            let bot_username = config.bot_username.to_lowercase();
-
-            let is_targeted = if cmd_parts.len() > 1 {
-                cmd_parts[1].to_lowercase().starts_with(&bot_username)
-            } else {
-                is_private
-            };
-
-            if is_targeted {
-                match cmd {
-                    "/start" => {
-                        tracing::info!("Gestione comando /start per utente {}", user_id);
-                        handle_start_command(bot.clone(), chat_id, user_id, &tr, &config, None)
-                            .await?;
-                        return Ok(());
-                    }
-                    "/help" => {
-                        bot.send_message(chat_id, tr.help_text)
-                            .parse_mode(ParseMode::Html)
-                            .reply_markup(quick_actions_inline_keyboard(&tr, user_id))
-                            .await?;
-                        return Ok(());
-                    }
-                    "/menu" => {
-                        bot.send_message(chat_id, tr.reply_keyboard_opened)
-                            .reply_markup(main_reply_keyboard(&tr))
-                            .await?;
-                        return Ok(());
-                    }
-                    "/hidekbd" => {
-                        bot.send_message(chat_id, tr.reply_keyboard_hidden)
-                            .reply_markup(KeyboardRemove::new())
-                            .await?;
-                        return Ok(());
-                    }
-                    "/settings" => {
-                        handle_settings_callback(
-                            bot.clone(),
                             chat_id,
                             None,
                             user_id,
@@ -547,11 +634,20 @@ pub async fn handle_message(
 
     // 3. Process candidates
     for url_str in url_candidates {
+                // VirusTotal check
+                if let Some(warning) = check_url_virustotal(&url_str).await {
+                    bot.send_message(chat_id, warning).await.ok();
+                }
         // 1. Expand shortened URLs first
         let expanded_url = rules.expand_url(&url_str).await;
         let original_url_str = url_str.clone();
-        let mut current_url = expanded_url;
-
+        let mut current_url = expanded_url.clone();
+        // Caching: se già pulito, usa cache
+        if let Some(cached) = URL_CACHE.get(&expanded_url) {
+            current_url = cached;
+            cleaned_urls.push((original_url_str, current_url.clone(), "CACHE".to_string()));
+            continue;
+        }
         // 2. Sanitization
         if let Some((cleaned, provider)) =
             rules.sanitize(&current_url, &custom_rules, &ignored_domains)
@@ -563,6 +659,7 @@ pub async fn handle_message(
                 if let Ok(Some(ai_cleaned)) = ai.sanitize(&current_url).await {
                     current_url = ai_cleaned;
                     let provider_name = format!("AI ({provider})");
+                    URL_CACHE.insert(expanded_url.clone(), current_url.clone());
                     cleaned_urls.push((original_url_str, current_url, provider_name));
                     continue;
                 }
@@ -574,12 +671,14 @@ pub async fn handle_message(
                 provider = %provider,
                 "URL pulito dal motore"
             );
+            URL_CACHE.insert(expanded_url.clone(), current_url.clone());
             cleaned_urls.push((original_url_str, current_url, provider));
         } else {
             tracing::debug!(url = %rules.redact_sensitive(&current_url), "URL gia' pulito");
             if user_config.is_ai_enabled() && config.ai_api_key.is_some() {
                 if let Ok(Some(ai_cleaned)) = ai.sanitize(&current_url).await {
                     tracing::info!("URL pulito da fallback AI");
+                    URL_CACHE.insert(expanded_url.clone(), ai_cleaned.clone());
                     cleaned_urls.push((original_url_str, ai_cleaned, "AI (Deep Scan)".to_string()));
                 }
             }

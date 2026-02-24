@@ -173,6 +173,19 @@ podman run --pod clear_urls_bot_pod clear_urls_bot
 - **Health Checks**: Application health monitoring
 - **Tracing**: Distributed tracing for request flow analysis
 
+## 🚀 Funzionalità Avanzate
+
+- Statistiche globali e ranking utenti: /topusers, /toplinks
+- Supporto multi-lingua: /language, /setlang <codice>
+- Modalità privacy: /privacy per attivare/disattivare salvataggio cronologia
+- Logging avanzato: solo admin riceve log critici via Telegram
+- Notifiche automatiche errori: messaggio all’admin in caso di panic/errori
+- Backup automatico DB: script backup_db.sh, cron consigliato
+- Caching risultati pulizia: cache interna per URL ripetuti
+- Ottimizzazione DB/async: query asincrone, pooling, batch
+- Webhook HTTPS: pronto per refactor, supporto via env
+- Integrazione VirusTotal: controllo link sospetti, avviso all’utente
+
 ## 🔧 Development Architecture
 
 ### Toolchain Requirements

@@ -32,7 +32,17 @@ async fn main() -> anyhow::Result<()> {
     // Canale per eventi real-time (SSE) - kept for bot logic, though not used in GraphQL yet
     let (event_tx, _) = tokio::sync::broadcast::channel::<serde_json::Value>(100);
 
-    let bot_task = tokio::spawn(bot::run_bot(
+        let admin_id = config.admin_id;
+        let bot_clone = bot.clone();
+        let panic_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            panic_hook(info);
+            if admin_id != 0 {
+                let msg = format!("[PANIC] {}", info);
+                let _ = tokio::spawn(bot_clone.send_message(ChatId(admin_id), msg));
+            }
+        }));
+        let bot_task = tokio::spawn(bot::run_bot(
         bot,
         db.clone(),
         rules.clone(),
