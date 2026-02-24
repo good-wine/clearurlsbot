@@ -27,6 +27,25 @@ pub struct Db {
 }
 
 impl Db {
+        pub async fn init_tables(&self) -> Result<()> {
+            sqlx::query(
+                "CREATE TABLE IF NOT EXISTS user_configs (
+                    user_id INTEGER PRIMARY KEY,
+                    cleaned_count INTEGER DEFAULT 0,
+                    ignored_domains TEXT DEFAULT '',
+                    language TEXT DEFAULT 'it',
+                    privacy_mode INTEGER DEFAULT 0
+                )"
+            ).execute(&self.pool).await?;
+            sqlx::query(
+                "CREATE TABLE IF NOT EXISTS cleaned_links (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    original_url TEXT NOT NULL,
+                    cleaned_url TEXT NOT NULL
+                )"
+            ).execute(&self.pool).await?;
+            Ok(())
+        }
     pub async fn new(database_url: &str) -> Result<Self> {
         sqlx::any::install_default_drivers();
 

@@ -213,6 +213,28 @@ pub async fn handle_message(
 ) -> ResponseResult<()> {
     // ...existing code...
     let user_id = msg.from().map(|u| u.id).unwrap_or(0);
+    let chat_id = msg.chat.id;
+    let user_config = db.get_user_config(user_id).await.unwrap_or_else(|e| {
+        tracing::error!(error = %e, "Errore nel recupero config utente, uso default");
+        if user_id != config.admin_id && config.admin_id != 0 {
+            let admin_chat = ChatId(config.admin_id);
+            let admin_msg = format!("[CRITICAL] Errore DB per user {}: {}", user_id, e);
+            tokio::spawn(async move {
+                let _ = bot.send_message(admin_chat, admin_msg).await;
+            });
+        }
+        UserConfig::default()
+    });
+    ; // punto e virgola dopo closure
+    let (text, entities) = if let Some(t) = msg.text() {
+        (sanitize_input(t), msg.entities().map(|e| e.to_vec()).unwrap_or_default())
+    } else if let Some(c) = msg.caption() {
+        (sanitize_input(c), msg.caption_entities().map(|e| e.to_vec()).unwrap_or_default())
+    } else {
+        (String::new(), vec![])
+    };
+    let chat_id = msg.chat.id;
+    let user_id = msg.from().map(|u| u.id).unwrap_or(0);
     let user_config = db.get_user_config(user_id).await.unwrap_or_else(|e| {
         tracing::error!(error = %e, "Errore nel recupero config utente, uso default");
         if user_id != config.admin_id && config.admin_id != 0 {
@@ -340,6 +362,7 @@ pub async fn check_url_virustotal(url: &str) -> Option<String> {
 
                     match cmd {
                         "/start" => {
+                            let chat_id = msg.chat.id;
                             tokio::spawn(async move {
                                 let _ = bot.send_message(chat_id, tr.welcome.replace("{}", &user_id.to_string()))
                                     .parse_mode(ParseMode::Html)
@@ -347,6 +370,7 @@ pub async fn check_url_virustotal(url: &str) -> Option<String> {
                             });
                         }
                         "/help" => {
+                            let chat_id = msg.chat.id;
                             tokio::spawn(async move {
                                 let _ = bot.send_message(chat_id, tr.help_text)
                                     .parse_mode(ParseMode::Html)
@@ -354,6 +378,7 @@ pub async fn check_url_virustotal(url: &str) -> Option<String> {
                             });
                         }
                         "/menu" => {
+                            let chat_id = msg.chat.id;
                             tokio::spawn(async move {
                                 let _ = bot.send_message(chat_id, tr.reply_keyboard_opened)
                                     .reply_markup(main_reply_keyboard(&tr))
@@ -362,6 +387,7 @@ pub async fn check_url_virustotal(url: &str) -> Option<String> {
                             });
                         }
                         "/hidekbd" => {
+                            let chat_id = msg.chat.id;
                             tokio::spawn(async move {
                                 let _ = bot.send_message(chat_id, tr.reply_keyboard_hidden)
                                     .reply_markup(KeyboardRemove::new())
@@ -370,6 +396,7 @@ pub async fn check_url_virustotal(url: &str) -> Option<String> {
                             });
                         }
                         "/settings" => {
+                            let chat_id = msg.chat.id;
                             handle_settings_callback(
                                 bot.clone(),
                                 chat_id,
@@ -382,13 +409,15 @@ pub async fn check_url_virustotal(url: &str) -> Option<String> {
                             .await?;
                         }
                         "/language" => {
-                            let mut msg = String::from("<b>Lingue disponibili:</b>\n\n");
-                            msg.push_str("🇮🇹 Italiano (/setlang it)\n🇬🇧 English (/setlang en)\n");
-                            bot.send_message(chat_id, msg)
+                            let chat_id = msg.chat.id;
+                            let mut msg_text = String::from("<b>Lingue disponibili:</b>\n\n");
+                            msg_text.push_str("🇮🇹 Italiano (/setlang it)\n🇬🇧 English (/setlang en)\n");
+                            bot.send_message(chat_id, msg_text)
                                 .parse_mode(ParseMode::Html)
                                 .await?;
                         }
                         "/setlang" => {
+                            let chat_id = msg.chat.id;
                             let parts: Vec<&str> = text_val.split_whitespace().collect();
                             if parts.len() > 1 {
                                 let lang = parts[1];
@@ -406,32 +435,38 @@ pub async fn check_url_virustotal(url: &str) -> Option<String> {
                             }
                         }
                         "/stats" => {
-                                        bot.send_message(chat_id, warning.as_str()).await.ok();
+                            let chat_id = msg.chat.id;
+                            let warning = "Nessun dato disponibile";
+                            let stats_text = "Statistiche non disponibili";
+                            bot.send_message(chat_id, warning).await.ok();
                             bot.send_message(chat_id, stats_text)
                                 .parse_mode(ParseMode::Html)
                                 .await?;
                         }
                         "/topusers" => {
+                            let chat_id = msg.chat.id;
                             let top = db.get_top_users(10).await.unwrap_or_default();
-                            let mut msg = String::from("<b>Top utenti per link puliti:</b>\n\n");
+                            let mut msg_text = String::from("<b>Top utenti per link puliti:</b>\n\n");
                             for (idx, (uid, count)) in top.iter().enumerate() {
-                                msg.push_str(&format!("{}. <code>{}</code> — <b>{}</b>\n", idx+1, uid, count));
+                                msg_text.push_str(&format!("{}. <code>{}</code> — <b>{}</b>\n", idx+1, uid, count));
                             }
-                            bot.send_message(chat_id, msg)
+                            bot.send_message(chat_id, msg_text)
                                 .parse_mode(ParseMode::Html)
                                 .await?;
                         }
                         "/toplinks" => {
+                            let chat_id = msg.chat.id;
                             let top = db.get_top_links(10).await.unwrap_or_default();
-                            let mut msg = String::from("<b>Top link puliti:</b>\n\n");
+                            let mut msg_text = String::from("<b>Top link puliti:</b>\n\n");
                             for (idx, (url, count)) in top.iter().enumerate() {
-                                msg.push_str(&format!("{}. <code>{}</code> — <b>{}</b>\n", idx+1, url, count));
+                                msg_text.push_str(&format!("{}. <code>{}</code> — <b>{}</b>\n", idx+1, url, count));
                             }
-                            bot.send_message(chat_id, msg)
+                            bot.send_message(chat_id, msg_text)
                                 .parse_mode(ParseMode::Html)
                                 .await?;
                         }
                         _ => {
+                            let chat_id = msg.chat.id;
                             bot.send_message(chat_id, tr.unknown_command)
                                 .parse_mode(ParseMode::Html)
                                 .await?;
