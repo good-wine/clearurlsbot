@@ -7,6 +7,7 @@ const DEFAULT_PORT: &str = "3000";
 const DEFAULT_CLEARURLS_SOURCE: &str = "https://raw.githubusercontent.com/ClearURLs/Rules/refs/heads/master/data.min.json";
 const DEFAULT_AI_API_BASE: &str = "https://api.openai.com/v1";
 const DEFAULT_AI_MODEL: &str = "gpt-3.5-turbo";
+const DEFAULT_INLINE_MAX_RESULTS: usize = 5;
 
 /// Configuration for the bot, loaded from environment variables.
 #[derive(Clone, Debug)]
@@ -20,6 +21,7 @@ pub struct Config {
     pub ai_api_key: Option<String>,
     pub ai_api_base: String,
     pub ai_model: String,
+    pub inline_max_results: usize,
 }
 
 impl Config {
@@ -49,6 +51,12 @@ impl Config {
         let ai_api_key = env::var("AI_API_KEY").ok().filter(|s| !s.is_empty());
         let ai_api_base = env::var("AI_API_BASE").unwrap_or_else(|_| DEFAULT_AI_API_BASE.to_string());
         let ai_model = env::var("AI_MODEL").unwrap_or_else(|_| DEFAULT_AI_MODEL.to_string());
+        let inline_max_results = env::var("INLINE_MAX_RESULTS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(DEFAULT_INLINE_MAX_RESULTS)
+            .min(50);
 
         Ok(Self {
             bot_token,
@@ -60,6 +68,7 @@ impl Config {
             ai_api_key,
             ai_api_base,
             ai_model,
+            inline_max_results,
         })
     }
 
@@ -73,6 +82,9 @@ impl Config {
         }
         if self.bot_username.is_empty() {
             anyhow::bail!("FATAL: BOT_USERNAME deve essere configurato");
+        }
+        if self.inline_max_results == 0 {
+            anyhow::bail!("FATAL: INLINE_MAX_RESULTS deve essere maggiore di 0");
         }
 
         // Render Reserved Ports check

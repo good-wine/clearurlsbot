@@ -36,6 +36,9 @@ A modern, high-performance Rust-based Telegram bot that automatically removes tr
 
 - `/start` - Initial setup, shows your User ID
 - `/help` - Usage instructions and command list  
+- `/menu` - Show quick reply keyboard
+- `/hidekbd` - Hide quick reply keyboard
+- `/settings` - Open in-chat settings menu
 - `/stats` - View your personal cleaning statistics in-chat
 
 ## 🚀 Quick Start
@@ -65,6 +68,9 @@ COOKIE_KEY=random_32_character_string
 AI_API_KEY=your_ai_api_key
 AI_API_BASE=https://api.openai.com/v1
 AI_MODEL=gpt-4
+
+# Optional: max inline results returned by Telegram inline mode (default: 5)
+INLINE_MAX_RESULTS=5
 ```
 
 ### 2. Run Locally
