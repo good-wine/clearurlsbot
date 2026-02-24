@@ -25,7 +25,7 @@ impl RateLimiter {
             Ok(u) => u,
             Err(e) => {
                 log::error!("Errore nel lock users: {}", e);
-                return;
+                return HashMap::new();
             }
         };
         let now = Instant::now();

@@ -1,7 +1,8 @@
 use std::collections::HashMap;
+use once_cell::sync::Lazy;
 use std::sync::Mutex;
 
-static URL_CACHE: Mutex<HashMap<String, bool>> = Mutex::new(HashMap::new());
+static URL_CACHE: Lazy<Mutex<HashMap<String, bool>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 pub fn is_valid_url(url: &str) -> bool {
     let mut cache = URL_CACHE.lock().unwrap();
@@ -24,7 +25,4 @@ mod tests {
         assert!(!is_valid_url("example.com"));
     }
 }
-/// Funzioni di validazione input/output
-pub fn is_valid_url(url: &str) -> bool {
-    url.starts_with("http://") || url.starts_with("https://")
-}
+// ...existing code...

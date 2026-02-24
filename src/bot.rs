@@ -38,7 +38,7 @@ pub async fn run_bot(
         .build()
         .dispatch()
         .await;
-}
+// ...existing code...
 
 #[tracing::instrument(skip(bot, db, rules, ai, config), fields(user_id = %q.from.id.0))]
 pub async fn handle_inline_query(
@@ -197,53 +197,12 @@ pub async fn handle_edited_message(
     handle_message(bot, msg, db, rules, ai, config, event_tx).await
 }
 
-/// Handles incoming Telegram messages, detects URLs, and cleans tracking parameters.
-///
-/// # Errors
-/// Returns an error if message sending or database operations fail.
 #[tracing::instrument(
     skip(bot, db, rules, ai, config, event_tx),
     fields(chat_id = %msg.chat.id, user_id)
 )]
 #[allow(clippy::too_many_lines)]
 pub async fn handle_message(
-                            // Integrazione VirusTotal: check URL sospetti
-                            async fn check_url_virustotal(url: &str) -> Option<String> {
-                                let api_key = std::env::var("VIRUSTOTAL_API_KEY").ok()?;
-                                let client = reqwest::Client::new();
-                                let resp = client.get("https://www.virustotal.com/api/v3/urls")
-                                    .header("x-apikey", api_key)
-                                    .query(&[("url", url)])
-                                    .send().await.ok()?;
-                                let json: serde_json::Value = resp.json().await.ok()?;
-                                let verdict = json["data"]["attributes"]["last_analysis_stats"]["malicious"].as_i64().unwrap_or(0);
-                                if verdict > 0 {
-                                    Some(format!("⚠️ VirusTotal: il link {} è sospetto!", url))
-                                } else {
-                                    None
-                                }
-                            }
-                        use moka::sync::Cache;
-                        static URL_CACHE: moka::sync::Cache<String, String> = moka::sync::Cache::new(10000);
-                    "/privacy" => {
-                        let mut updated_config = user_config.clone();
-                        updated_config.privacy_mode = 1 - user_config.privacy_mode;
-                        db.save_user_config(&updated_config).await.ok();
-                        let tr_new = i18n::get_translations(lang_code);
-                        let msg = if updated_config.privacy_mode == 1 {
-                            tr_new.privacy_mode_enabled
-                        } else {
-                            tr_new.privacy_mode_disabled
-                        };
-                        bot.send_message(chat_id, msg)
-                            .parse_mode(ParseMode::Html)
-                            .await?;
-                    }
-                    // ...existing code...
-                    // Log cleaned link in DB solo se privacy_mode disattivata
-                    if user_config.privacy_mode == 0 {
-                        db.log_cleaned_link(user_id, original, &final_url, &provider_name).await.ok();
-                    }
     bot: Bot,
     msg: Message,
     db: Db,
@@ -252,33 +211,79 @@ pub async fn handle_message(
     config: crate::config::Config,
     event_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
 ) -> ResponseResult<()> {
-    tracing::info!(chat_id = %msg.chat.id, msg_id = %msg.id, "Elaborazione messaggio in arrivo");
-    let chat_id = msg.chat.id;
-    let user_id = msg.from.as_ref().map_or(0, |u| i64::try_from(u.id.0).unwrap_or(0));
-    tracing::Span::current().record("user_id", user_id);
-    // Rate limiting anti-flood
-    if !RATE_LIMITER.check(user_id) {
-        return Ok(()); // Silenziosamente ignora richieste flood
-    }
-
+    // ...existing code...
+    let user_id = msg.from().map(|u| u.id).unwrap_or(0);
     let user_config = db.get_user_config(user_id).await.unwrap_or_else(|e| {
         tracing::error!(error = %e, "Errore nel recupero config utente, uso default");
-        // Logging avanzato: notifica admin se errore critico
         if user_id != config.admin_id && config.admin_id != 0 {
             let admin_chat = ChatId(config.admin_id);
             let msg = format!("[CRITICAL] Errore DB per user {}: {}", user_id, e);
-            let _ = bot.send_message(admin_chat, msg).await;
+            tokio::spawn(async move {
+                let _ = bot.send_message(admin_chat, msg).await;
+            });
         }
         UserConfig::default()
     });
+    ; // punto e virgola dopo closure
+    let (text, entities) = if let Some(t) = msg.text() {
+        (sanitize_input(t), msg.entities().map(|e| e.to_vec()).unwrap_or_default())
+    } else if let Some(c) = msg.caption() {
+        (sanitize_input(c), msg.caption_entities().map(|e| e.to_vec()).unwrap_or_default())
+    } else {
+        (String::new(), vec![])
+    };
+}
+
+use moka::future::Cache;
+pub static URL_CACHE: once_cell::sync::Lazy<Cache<String, String>> = once_cell::sync::Lazy::new(|| Cache::new(10000));
+
+pub async fn check_url_virustotal(url: &str) -> Option<String> {
+    let api_key = std::env::var("VIRUSTOTAL_API_KEY").ok()?;
+    let client = reqwest::Client::new();
+    let resp = client.get("https://www.virustotal.com/api/v3/urls")
+        .header("x-apikey", api_key)
+        .query(&[("url", url)])
+        .send().await.ok()?;
+    let json: serde_json::Value = resp.json().await.ok()?;
+    let verdict = json["data"]["attributes"]["last_analysis_stats"]["malicious"].as_i64().unwrap_or(0);
+    if verdict > 0 {
+        Some(format!("⚠️ VirusTotal: il link {} è sospetto!", url))
+    } else {
+        None
+    }
+}
+// ...existing code...
+                    // ...existing code...
+                    // Log cleaned link in DB solo se privacy_mode disattivata
+                    if user_config.privacy_mode == 0 {
+                        let original = text.clone();
+                        let final_url = text.clone(); // Sostituisci con la logica reale
+                        let provider_name = "provider"; // Sostituisci con la logica reale
+                        db.log_cleaned_link(user_id, original, &final_url, &provider_name).await.ok();
+                    }
+                // ...existing code...
+// ...existing code...
+
+    let user_config = db.get_user_config(user_id).await.unwrap_or_else(|e| {
+        tracing::error!(error = %e, "Errore nel recupero config utente, uso default");
+        if user_id != config.admin_id && config.admin_id != 0 {
+            let admin_chat = ChatId(config.admin_id);
+            let msg = format!("[CRITICAL] Errore DB per user {}: {}", user_id, e);
+            tokio::spawn(async move {
+                let _ = bot.send_message(admin_chat, msg).await;
+            });
+        }
+        UserConfig::default()
+    });
+    ; // <-- aggiunto punto e virgola dopo la closure
 
     // 1. Detect URLs early
     let (text, entities) = if let Some(t) = msg.text() {
-        (sanitize_input(t), msg.entities())
+        (sanitize_input(t), msg.entities().map(|e| e.to_vec()).unwrap_or_default())
     } else if let Some(c) = msg.caption() {
-        (sanitize_input(c), msg.caption_entities())
+        (sanitize_input(c), msg.caption_entities().map(|e| e.to_vec()).unwrap_or_default())
     } else {
-        ("", None)
+        (String::new(), vec![])
     };
 
     // Detect language
@@ -335,26 +340,34 @@ pub async fn handle_message(
 
                     match cmd {
                         "/start" => {
-                            bot.send_message(chat_id, tr.welcome.replace("{}", &user_id.to_string()))
-                                .parse_mode(ParseMode::Html)
-                                .await?;
+                            tokio::spawn(async move {
+                                let _ = bot.send_message(chat_id, tr.welcome.replace("{}", &user_id.to_string()))
+                                    .parse_mode(ParseMode::Html)
+                                    .await;
+                            });
                         }
                         "/help" => {
-                            bot.send_message(chat_id, tr.help_text)
-                                .parse_mode(ParseMode::Html)
-                                .await?;
+                            tokio::spawn(async move {
+                                let _ = bot.send_message(chat_id, tr.help_text)
+                                    .parse_mode(ParseMode::Html)
+                                    .await;
+                            });
                         }
                         "/menu" => {
-                            bot.send_message(chat_id, tr.reply_keyboard_opened)
-                                .reply_markup(main_reply_keyboard(&tr))
-                                .parse_mode(ParseMode::Html)
-                                .await?;
+                            tokio::spawn(async move {
+                                let _ = bot.send_message(chat_id, tr.reply_keyboard_opened)
+                                    .reply_markup(main_reply_keyboard(&tr))
+                                    .parse_mode(ParseMode::Html)
+                                    .await;
+                            });
                         }
                         "/hidekbd" => {
-                            bot.send_message(chat_id, tr.reply_keyboard_hidden)
-                                .reply_markup(KeyboardRemove::new())
-                                .parse_mode(ParseMode::Html)
-                                .await?;
+                            tokio::spawn(async move {
+                                let _ = bot.send_message(chat_id, tr.reply_keyboard_hidden)
+                                    .reply_markup(KeyboardRemove::new())
+                                    .parse_mode(ParseMode::Html)
+                                    .await;
+                            });
                         }
                         "/settings" => {
                             handle_settings_callback(
@@ -393,7 +406,7 @@ pub async fn handle_message(
                             }
                         }
                         "/stats" => {
-                            let stats_text = tr.stats_text.replace("{}", &user_config.cleaned_count.to_string());
+                                        bot.send_message(chat_id, warning.as_str()).await.ok();
                             bot.send_message(chat_id, stats_text)
                                 .parse_mode(ParseMode::Html)
                                 .await?;
