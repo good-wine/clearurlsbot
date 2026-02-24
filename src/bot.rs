@@ -427,49 +427,8 @@ pub async fn handle_message(
                     return Ok(());
                 }
             }
-                            chat_id,
-                            None,
-                            user_id,
-                            db.clone(),
-                            config.clone(),
-                            &tr,
-                        )
-                        .await?;
-                        return Ok(());
-                    }
-                    "/language" => {
-                        let language_text = format!(
-                            "<b>{}</b>\n\n{} <b>{}</b>",
-                            tr.s_language_title,
-                            tr.s_language_current,
-                            user_config.language
-                        );
-                        bot.send_message(chat_id, language_text)
-                            .parse_mode(ParseMode::Html)
-                            .reply_markup(language_inline_keyboard(&tr, user_id))
-                            .await?;
-                        return Ok(());
-                    }
-                    "/stats" => {
-                        let stats_text = tr
-                            .stats_text
-                            .replace("{}", &user_config.cleaned_count.to_string());
-                        bot.send_message(chat_id, stats_text)
-                            .parse_mode(ParseMode::Html)
-                            .reply_markup(quick_actions_inline_keyboard(&tr, user_id))
-                            .await?;
-                        return Ok(());
-                    }
-                    _ => {
-                        bot.send_message(chat_id, tr.unknown_command)
-                            .parse_mode(ParseMode::Html)
-                            .await?;
-                        return Ok(());
-                    }
-                }
-            }
-        }
-    }
+            false
+        })
 
     if let Some(text_val) = msg.text() {
         if let Some(action) = quick_reply_action(text_val, &tr) {
