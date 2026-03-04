@@ -976,28 +976,28 @@ pub async fn handle_message(
             false
         };
 
-        // VirusTotal security check on both original and expanded URL (unless whitelisted)
+        // Combined security check with both VirusTotal and URLScan (unless whitelisted)
         if !is_whitelisted {
-            if let Some(warning) = check_url_virustotal(&url_str).await {
-                tracing::warn!("VirusTotal: Invio allerta di sicurezza all'utente");
+            if let Some(warning) = check_url_combined(&url_str).await {
+                tracing::warn!("Security Alert: inviando allerta consolidata per URL originale");
                 if let Err(e) = bot
                     .send_message(chat_id, warning.clone())
                     .parse_mode(ParseMode::Html)
                     .await
                 {
-                    tracing::error!(error = %e, "Errore nell'invio del messaggio VirusTotal");
+                    tracing::error!(error = %e, "Errore nell'invio del messaggio di allerta consolidata");
                 }
             }
             // Also check expanded URL if different from original
             if expanded_url != url_str {
-                if let Some(warning) = check_url_virustotal(&expanded_url).await {
-                    tracing::warn!("VirusTotal: Invio allerta di sicurezza per URL espanso");
+                if let Some(warning) = check_url_combined(&expanded_url).await {
+                    tracing::warn!("Security Alert: inviando allerta consolidata per URL espanso");
                     if let Err(e) = bot
                         .send_message(chat_id, warning.clone())
                         .parse_mode(ParseMode::Html)
                         .await
                     {
-                        tracing::error!(error = %e, "Errore nell'invio del messaggio VirusTotal");
+                        tracing::error!(error = %e, "Errore nell'invio del messaggio di allerta consolidata");
                     }
                 }
             }
@@ -1005,29 +1005,6 @@ pub async fn handle_message(
             tracing::info!(domain = %domain, "URL saltato: dominion in whitelist");
         }
 
-        // URLScan.io security check on both original and expanded URL
-        if let Some(warning) = check_url_urlscan(&url_str).await {
-            tracing::warn!("URLScan.io: Invio allerta di sicurezza all'utente");
-            if let Err(e) = bot
-                .send_message(chat_id, warning.clone())
-                .parse_mode(ParseMode::Html)
-                .await
-            {
-                tracing::error!(error = %e, "Errore nell'invio del messaggio URLScan.io");
-            }
-        }
-        if expanded_url != url_str {
-            if let Some(warning) = check_url_urlscan(&expanded_url).await {
-                tracing::warn!("URLScan.io: Invio allerta di sicurezza per URL espanso");
-                if let Err(e) = bot
-                    .send_message(chat_id, warning.clone())
-                    .parse_mode(ParseMode::Html)
-                    .await
-                {
-                    tracing::error!(error = %e, "Errore nell'invio del messaggio URLScan.io");
-                }
-            }
-        }
 
         if !rules.is_supported_by_clearurls(&expanded_url) {
             tracing::debug!(url = %rules.redact_sensitive(&expanded_url), "URL non supportato da ClearURLs, skip pulizia");
@@ -1214,6 +1191,81 @@ pub async fn handle_message(
 use moka::future::Cache;
 pub static URL_CACHE: once_cell::sync::Lazy<Cache<String, String>> =
     once_cell::sync::Lazy::new(|| Cache::new(10000));
+
+/// Check URL with both VirusTotal and URLScan services and consolidate results
+///
+/// This function calls both security scanning services and combines their results
+/// into a single consolidated alert message instead of sending separate messages.
+/// Returns Option<String> with the combined alert if either service detects a threat.
+pub async fn check_url_combined(url: &str) -> Option<String> {
+    // Call both services concurrently for efficiency
+    let vt_result = check_url_virustotal(url);
+    let urlscan_result = check_url_urlscan(url);
+    
+    let (vt_msg, urlscan_msg) = tokio::join!(vt_result, urlscan_result);
+    
+    // Only send a message if at least one service detected a threat
+    if vt_msg.is_none() && urlscan_msg.is_none() {
+        return None;
+    }
+    
+    // Build the consolidated message
+    let mut consolidated = String::from(
+        "🚨 <b>ALLERTA SICUREZZA</b> 🚨\n\
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\
+        🔴 <b>MINACCIA RILEVATA - REPORT CONSOLIDATO</b>\n\n"
+    );
+    
+    // Extract key information from VirusTotal alert if present
+    if let Some(vt_alert) = vt_msg {
+        consolidated.push_str("🛡️ <b>VirusTotal Security Scan:</b>\n");
+        // Extract the relevant part after the header
+        if let Some(content_start) = vt_alert.find("🔴 <b>LINK PERICOLOSO RILEVATO</b>") {
+            let content = &vt_alert[content_start..];
+            // Get lines up to the report link
+            if let Some(report_idx) = content.find("📋 <a href=") {
+                let summary = &content[..report_idx];
+                consolidated.push_str(summary);
+                // Extract and append the report link
+                if let Some(link_end) = content[report_idx..].find("</a>") {
+                    consolidated.push_str(&content[report_idx..report_idx + link_end + 4]);
+                }
+            } else {
+                consolidated.push_str(content);
+            }
+        }
+        consolidated.push_str("\n\n");
+    }
+    
+    // Extract key information from URLScan alert if present
+    if let Some(urlscan_alert) = urlscan_msg {
+        consolidated.push_str("🌐 <b>URLScan.io Web Reputation:</b>\n");
+        // Extract the relevant part after the header
+        if let Some(content_start) = urlscan_alert.find("🔴 <b>LINK PERICOLOSO RILEVATO</b>") {
+            let content = &urlscan_alert[content_start..];
+            // Get lines up to the report link
+            if let Some(report_idx) = content.find("📋 <a href=") {
+                let summary = &content[..report_idx];
+                consolidated.push_str(summary);
+                // Extract and append the report link
+                if let Some(link_end) = content[report_idx..].find("</a>") {
+                    consolidated.push_str(&content[report_idx..report_idx + link_end + 4]);
+                }
+            } else {
+                consolidated.push_str(content);
+            }
+        }
+        consolidated.push_str("\n\n");
+    }
+    
+    // Add final warning
+    consolidated.push_str(
+        "⚠️ <b>ATTENZIONE:</b> Questo link è stato segnalato come pericoloso.\n\
+        Si consiglia di NON visitare la pagina."
+    );
+    
+    Some(consolidated)
+}
 
 /// Check URL with VirusTotal API v3
 ///
