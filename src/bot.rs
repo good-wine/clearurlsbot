@@ -1274,6 +1274,7 @@ pub async fn check_url_urlscan(url: &str) -> Option<String> {
     };
 
     let mut malicious = false;
+    let mut potentially_malicious = false;
     let mut score = 0.0_f64;
 
     for _ in 0..4 {
@@ -1301,14 +1302,37 @@ pub async fn check_url_urlscan(url: &str) -> Option<String> {
         malicious = result_json["verdicts"]["overall"]["malicious"]
             .as_bool()
             .unwrap_or(false);
+        let verdict_text = result_json["verdicts"]["overall"]["verdict"]
+            .as_str()
+            .or_else(|| result_json["verdicts"]["overall"]["classification"].as_str())
+            .or_else(|| result_json["verdicts"]["overall"]["label"].as_str())
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
+
+        potentially_malicious = verdict_text.contains("potentially malicious")
+            || verdict_text.contains("suspicious");
+
         score = result_json["verdicts"]["overall"]["score"]
             .as_f64()
             .unwrap_or(0.0);
         break;
     }
 
-    if malicious {
-        tracing::warn!(url = %url, score = score, malicious = malicious, "URLScan.io: minaccia rilevata");
+    if malicious || potentially_malicious {
+        tracing::warn!(
+            url = %url,
+            score = score,
+            malicious = malicious,
+            potentially_malicious = potentially_malicious,
+            "URLScan.io: minaccia rilevata"
+        );
+
+        let verdict_label = if malicious {
+            "MALICIOUS"
+        } else {
+            "POTENTIALLY MALICIOUS"
+        };
 
         let msg = format!(
             "🚨 <b>ALLERTA SICUREZZA</b> 🚨\n\
@@ -1317,11 +1341,12 @@ pub async fn check_url_urlscan(url: &str) -> Option<String> {
             🔴 <b>LINK PERICOLOSO RILEVATO</b>\n\n\
             📊 <b>Analisi Comportamentale:</b>\n\
             📈 Risk Score: <b>{:.1}/100</b>\n\
-            🔴 Classificato come: <b>MALICIOUS</b>\n\
+            🔴 Classificato come: <b>{}</b>\n\
             \n🔒 <b>ATTENZIONE:</b> Pagina web sospetta\n\
             Potrebbe contenere phishing o malware.\n\n\
             📋 <a href=\"{}\">Visualizza Scansione Completa ›</a>",
             score,
+            verdict_label,
             result_link
         );
 
