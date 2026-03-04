@@ -15,6 +15,10 @@
         "/^cargo check 2>&1 \\| tail -20$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^cd /workspaces/clearurlsbot && timeout 150 cargo build --release 2>&1 &\nsleep 3\necho \"Build in background\\.\\.\\.\"$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

@@ -797,25 +797,56 @@ pub async fn handle_message(
         String::from(tr.cleaned_links)
     };
 
+    // Calculate statistics for improved UI
+    let mut total_params_removed = 0;
+    for (original, cleaned, _) in &cleaned_urls {
+        total_params_removed += removed_query_params_count(original, cleaned);
+    }
+
+    // Enhanced header with emoji and stats
+    let stats_line = format!(
+        "\n✅ <b>Pulizia completata</b>\n━━━━━━━━━━━━━━━━\n\
+        📊 <b>Statistiche:</b>\n\
+        🔗 URL puliti: <code>{}</code>\n",
+        cleaned_urls.len()
+    );
+    
+    if total_params_removed > 0 {
+        response.push_str(&stats_line);
+        response.push_str(&format!(
+            "🗑️  Parametri rimossi: <code>{}</code>\n\n",
+            total_params_removed
+        ));
+    } else {
+        response.push_str(&stats_line);
+        response.push_str("\n");
+    }
+
     if !response.ends_with('\n') {
         response.push('\n');
     }
 
+    // Enhanced link display with visual separators
+    response.push_str("🌐 <b>Link puliti:</b>\n");
+    
     if cleaned_urls.len() == 1 {
         let clean = cleaned_urls[0].1.trim();
         let escaped_url = html::escape(clean);
-        let link_entry = format!("<a href=\"{escaped_url}\">{escaped_url}</a>");
+        let link_entry = format!("〉 <a href=\"{escaped_url}\">{escaped_url}</a>");
 
         if response.len() + link_entry.len() < MAX_MESSAGE_LENGTH {
             response.push_str(&link_entry);
         }
     } else {
-        for (_, cleaned, _) in &cleaned_urls {
+        for (idx, (_, cleaned, _)) in cleaned_urls.iter().enumerate() {
             let clean = cleaned.trim();
             let escaped_url = html::escape(clean);
-            let link_entry = format!("• <a href=\"{escaped_url}\">{escaped_url}</a>\n");
+            let link_entry = format!("{} <a href=\"{escaped_url}\">{escaped_url}</a>\n",
+                if idx == cleaned_urls.len() - 1 { "└─" } else { "├─" }
+            );
 
             if response.len() + link_entry.len() > MAX_MESSAGE_LENGTH {
+                response.push_str("└─ <i>... e altri URL</i>\n");
                 response.push_str(tr.truncated);
                 break;
             }
@@ -1641,33 +1672,37 @@ async fn handle_settings_callback(
     };
 
     let settings_text = format!(
-        "<b>{}</b>\n\n{}: <code>{}</code>\n{}: {}",
-        tr.s_menu_title, tr.s_user_id, user_id, tr.s_role, role
+        "<b>⚙️  {}</b>\n\n\
+        <b>👤 Profilo:</b>\n\
+        ID: <code>{}</code>\n\
+        Ruolo: <b>{}</b>\n\n\
+        <b>📋 Impostazioni disponibili:</b>",
+        tr.s_menu_title, user_id, role
     );
 
     let mut keyboard_rows = vec![
         vec![
             InlineKeyboardButton::callback(
-                tr.s_notifications,
+                format!("🔔 {}", tr.s_notifications),
                 format!("user_setting:notifications:{}", user_id),
             ),
             InlineKeyboardButton::callback(
-                tr.s_ai_settings,
+                format!("🤖 {}", tr.s_ai_settings),
                 format!("user_setting:ai:{}", user_id),
             ),
         ],
         vec![
             InlineKeyboardButton::callback(
-                tr.s_privacy,
+                format!("🔒 {}", tr.s_privacy),
                 format!("user_setting:privacy:{}", user_id),
             ),
             InlineKeyboardButton::callback(
-                tr.s_link_processing,
+                format!("⚡ {}", tr.s_link_processing),
                 format!("user_setting:links:{}", user_id),
             ),
         ],
         vec![InlineKeyboardButton::callback(
-            tr.s_language,
+            format!("🌐 {}", tr.s_language),
             format!("user_setting:language:{}", user_id),
         )],
     ];
@@ -1676,18 +1711,18 @@ async fn handle_settings_callback(
     if is_admin {
         keyboard_rows.push(vec![
             InlineKeyboardButton::callback(
-                tr.s_admin_panel,
+                format!("🛠️  {}", tr.s_admin_panel),
                 format!("admin_setting:panel:{}", user_id),
             ),
             InlineKeyboardButton::callback(
-                tr.s_statistics,
+                format!("📊 {}", tr.s_statistics),
                 format!("admin_setting:stats:{}", user_id),
             ),
         ]);
     }
 
     keyboard_rows.push(vec![InlineKeyboardButton::callback(
-        tr.s_back_to_main,
+        format!("◀️  {}", tr.s_back_to_main),
         format!("back_to_main:{}", user_id),
     )]);
 
