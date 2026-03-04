@@ -9,6 +9,7 @@ ClearURLs Bot è stato ottimizzato per **build veloce in sviluppo** e **binary e
 ## Quick Start
 
 ### Development (Fast - 20-30s)
+
 ```bash
 # Via Makefile
 make build-fast
@@ -18,6 +19,7 @@ cargo build
 ```
 
 ### Production (Optimized - 2-3 min)
+
 ```bash
 # Via Makefile
 make release
@@ -30,6 +32,7 @@ cargo build --release
 ```
 
 ### Quick Syntax Check (2-3s)
+
 ```bash
 make check-fast
 ```
@@ -47,12 +50,14 @@ make check-fast
 ### Profile Configuration
 
 **Development (`[profile.dev]`):**
+
 - `opt-level = 1` → Minimal optimization for fast compilation
 - `debug = 0` → No debug info (only 2-3s compilation)
 - `incremental = true` → Recompile only changed files
 - Dependencies optimized with `opt-level = 2`
 
 **Release (`[profile.release]`):**
+
 - `opt-level = 3` → Maximum optimization
 - `lto = true` → Link Time Optimization (slower build, smaller binary)
 - `codegen-units = 1` → Single codegen unit for better optimization
@@ -65,6 +70,7 @@ make check-fast
 ## Build Tools
 
 ### 1. **Makefile** (Recommended)
+
 Best for most workflows with syntax highlighting.
 
 ```bash
@@ -78,7 +84,9 @@ make ci             # Full CI pipeline
 ```
 
 ### 2. **VS Code Tasks** (Graphical)
+
 Press `Cmd+Shift+B` (or `Ctrl+Shift+B`) and select:
+
 - ✓ check (fast)
 - ✓ build (debug - optimized)
 - ✓ build (release - full optimization)
@@ -87,6 +95,7 @@ Press `Cmd+Shift+B` (or `Ctrl+Shift+B`) and select:
 - ✓ ci (full pipeline)
 
 ### 3. **Build Script** (`build.sh`)
+
 Fine-grained control with options.
 
 ```bash
@@ -100,6 +109,7 @@ Fine-grained control with options.
 ```
 
 ### 4. **Direct Cargo Commands**
+
 For advanced users:
 
 ```bash
@@ -135,6 +145,7 @@ retry = 3  # Retry failed downloads
 **After optimization:** ~11MB (stripped)
 
 Achieved by:
+
 - ✓ `strip = true` in release profile
 - ✓ `lto = true` (Link Time Optimization)
 - ✓ `opt-level = 3` (Maximum compression)
@@ -146,6 +157,7 @@ Achieved by:
 ## Compilation Times (Benchmarks)
 
 ### First Build (Clean)
+
 ```
 cargo check --release:  ⏱️  ~50s
 cargo build:            ⏱️  ~4 min
@@ -153,6 +165,7 @@ cargo build --release:  ⏱️  ~7 min
 ```
 
 ### Incremental Build (After small change)
+
 ```
 cargo check --release:  ⏱️  ~2-3s
 cargo build:            ⏱️  ~15-20s
@@ -160,6 +173,7 @@ cargo build --release:  ⏱️  ~30-40s
 ```
 
 ### CI Pipeline (Full checks)
+
 ```
 cargo clean && full build: ⏱️  ~8-10 min
 ```
@@ -169,6 +183,7 @@ cargo clean && full build: ⏱️  ~8-10 min
 ## Common Workflows
 
 ### Development Flow (Quick Iteration)
+
 ```bash
 # 1. Edit code
 # 2. Quick syntax check
@@ -185,11 +200,13 @@ make build-fast
 ```
 
 ### Before Commit
+
 ```bash
 make ci  # Runs: check + clippy + test (this is safe to use locally)
 ```
 
 ### Production Release
+
 ```bash
 make release  # Full optimized build with strip
 make size     # Show binary size
@@ -200,11 +217,13 @@ make size     # Show binary size
 ## Troubleshooting
 
 ### Build is slow
+
 1. Check if another cargo process is running: `ps aux | grep cargo`
 2. Try `cargo clean` (careful - will rebuild everything)
 3. Ensure you're using development mode for local work: `cargo build` (not `--release`)
 
 ### Binary is too large
+
 ```bash
 # Check what's taking space
 du -sh target/
@@ -217,6 +236,7 @@ cargo build --release -Zbuild-std=core,alloc,std -Zbuild-std-features=core/memch
 ```
 
 ### Check uses wrong Rust
+
 ```bash
 rustc --version
 cargo --version
@@ -273,12 +293,14 @@ cargo build --release
 If compilation is still slow:
 
 1. **sccache** - Distributed caching
+
    ```toml
    [build]
    rustc-wrapper = "sccache"
    ```
 
 2. **mold linker** - Faster linking (Linux only)
+
    ```toml
    [target.x86_64-unknown-linux-gnu]
    linker = "clang"
@@ -286,12 +308,14 @@ If compilation is still slow:
    ```
 
 3. **cranelift** - Alternative codegen (experimental)
+
    ```bash
    cargo install cargo-cranelift
    RUSTFLAGS="-C llvm-args=-use-cranelift" cargo build
    ```
 
 4. **Parallel frontends** (Nightly)
+
    ```bash
    cargo +nightly build -Z thread-local-const
    ```

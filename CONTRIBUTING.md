@@ -7,10 +7,12 @@ Thank you for your interest in contributing! We welcome all contributions that h
 ### Prerequisites
 
 **Required:**
+
 - [Rust](https://www.rust-lang.org/tools/install) 1.75+ (MSRV), 1.92+ recommended
 - [Git](https://git-scm.com/) for version control
 
 **Optional (for container development):**
+
 - [Podman](https://podman.io/getting-started/installation) for containerized development
 - [Podman Compose](https://github.com/containers/podman-compose) for compose workflows
 - [Docker](https://www.docker.com/) (alternative to Podman)
@@ -109,24 +111,48 @@ cargo doc --no-deps --document-private-items
 ### Testing Guidelines
 
 1. **Unit Tests**: Test individual functions and modules
+
    ```bash
    cargo test --lib
    ```
 
 2. **Integration Tests**: Test component interactions
+
    ```bash
    cargo test --test '*'
    ```
 
 3. **Documentation Tests**: Ensure examples in documentation work
+
    ```bash
    cargo test --doc
    ```
 
 4. **Performance Tests**: Benchmark critical paths
+
    ```bash
    cargo bench  # If benchmarks exist
    ```
+
+5. **Test Coverage**: All tests are in `tests/` directory
+
+   - `sanitizer_tests.rs` - URL cleaning and validation
+   - `database_tests.rs` - Database operations and migrations
+   - `bot_commands_tests.rs` - Bot command handlers
+   - `common/mod.rs` - Shared test utilities and fixtures
+
+### Test Execution in CI/CD
+
+All tests run automatically on push/PR via GitHub Actions:
+
+- **Check**: `cargo check --release --all-features`
+- **Test**: `cargo test --release --all-features`
+- **Format**: `cargo fmt --all -- --check`
+- **Clippy**: `cargo clippy --release --all-features -- -D warnings`
+- **Security Audit**: `cargo audit`
+- **Markdown Lint**: `markdownlint "*.md" "docs/*.md"`
+
+See [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for full pipeline.
 
 ### Code Quality Standards
 
@@ -178,7 +204,7 @@ src/
 
 ### Adding New Features
 
-1. **Database Changes**: 
+1. **Database Changes**:
    - Create migration in `migrations/` directory
    - Update models in `src/db/models.rs`
    - Add relevant tests
@@ -198,6 +224,7 @@ src/
 ### Step-by-Step PR Submission
 
 1. **Create Branch**: Use descriptive branch names
+
    ```bash
    git checkout -b feature/url-sanitization-enhancement
    # or
@@ -205,6 +232,7 @@ src/
    ```
 
 2. **Development Work**:
+
    ```bash
    # Make your changes
    # Commit frequently with descriptive messages
@@ -217,12 +245,13 @@ src/
    ```
 
 3. **Quality Checks**:
+
    ```bash
    # Run full test suite
    ./scripts/check-all.sh  # If available, or run manually
    ```
 
-4. **Create PR**: 
+4. **Create PR**:
    - Use GitHub's web interface or CLI
    - Fill out PR template completely
    - Link relevant issues
@@ -285,7 +314,8 @@ echo "🎉 All checks passed!"
 
 ### Common Issues
 
-1. **Build Failures**: 
+1. **Build Failures**:
+
    ```bash
    # Clean build
    cargo clean && cargo build
@@ -295,6 +325,7 @@ echo "🎉 All checks passed!"
    ```
 
 2. **Database Issues**:
+
    ```bash
    # Reset database
    rm bot.db && cargo run
@@ -304,6 +335,7 @@ echo "🎉 All checks passed!"
    ```
 
 3. **Container Issues**:
+
    ```bash
    # Rebuild container
    podman rmi clear_urls_bot
@@ -328,6 +360,7 @@ cargo run
 ### Bug Reports
 
 Use the issue template with:
+
 - **Environment**: Rust version, OS, database type
 - **Steps to Reproduce**: Clear, minimal reproduction steps
 - **Expected Behavior**: What should happen
@@ -337,6 +370,7 @@ Use the issue template with:
 ### Feature Requests
 
 Provide:
+
 - **Use Case**: Why this feature is needed
 - **Proposed Solution**: How you envision it working
 - **Alternatives Considered**: Other approaches you've thought of
@@ -345,6 +379,7 @@ Provide:
 ## 🏆 Recognition
 
 Contributors are recognized in:
+
 - **README.md**: Contributors section
 - **CHANGELOG.md**: Credits for specific contributions
 - **Releases**: Special thanks for major contributions
@@ -368,3 +403,110 @@ For full details, see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 - **Maintainers**: Tag maintainainers for urgent issues
 
 Thank you for contributing to ClearURLs Bot! Every contribution helps make the project better. 🎉
+---
+
+## 🆕 New Features & Testing
+
+### Testing Infrastructure
+
+The project now includes comprehensive test suites:
+
+````bash
+# Run all tests
+cargo test --release
+
+# Run specific test modules
+cargo test sanitizer_tests
+cargo test database_tests
+cargo test bot_commands_tests
+
+# Run tests with output
+cargo test -- --show-output --nocapture
+````
+
+### Test Organization
+
+- **tests/common/**: Shared test utilities and fixtures
+- **tests/sanitizer_tests.rs**: URL sanitization and rule engine tests
+- **tests/database_tests.rs**: Database operations and migrations tests
+- **tests/bot_commands_tests.rs**: Bot command handler tests
+
+### Feature Flags System
+
+New feature flag infrastructure allows per-user feature enablement:
+
+````rust
+// Enable a feature for a user
+db.set_feature_flag(user_id, "ai_engine", true).await?;
+
+// Check if feature is enabled
+if db.is_feature_enabled(user_id, "experimental_scanner").await? {
+    // Use experimental feature
+}
+````
+
+Available features:
+
+- `ai_engine`: AI-powered URL sanitization
+- `url_scanner`: VirusTotal/URLScan integration
+- `advanced_stats`: Extended statistics tracking
+
+### Rate Limiting
+
+Database-level rate limiting protects against abuse:
+
+````rust
+// Check rate limit (50 actions per hour)
+if !db.check_rate_limit(user_id, 50, 3600).await? {
+    bot.send_message(chat_id, "Rate limit exceeded. Please wait.").await?;
+    return Ok(());
+}
+````
+
+### Health Check Endpoint
+
+Monitor bot health programmatically:
+
+````rust
+use clear_urls_bot::health::HealthCheck;
+
+let health = HealthCheck::new("1.4.0");
+let status = health.check(&db).await?;
+
+// Returns JSON:
+// {
+//   "status": "healthy",
+//   "version": "1.4.0",
+//   "uptime_seconds": 3600,
+//   "database": {"connected": true, "response_time_ms": 5},
+//   "timestamp": 1234567890
+// }
+````
+
+### CI/CD Pipeline
+
+GitHub Actions automatically runs:
+
+- ✅ Code formatting check (`cargo fmt`)
+- ✅ Linting (`cargo clippy`)
+- ✅ Test suite (`cargo test`)
+- ✅ Security audit (`cargo audit`)
+- ✅ Markdown linting
+- ✅ Container image build (on main branch)
+
+### Backup Best Practices
+
+````bash
+# Manual backup
+./backup_db.sh
+
+# Automated daily backup (add to crontab)
+0 2 * * * /path/to/clearurlsbot/backup_db.sh
+
+# Custom retention
+BACKUP_RETENTION_DAYS=60 MAX_BACKUPS=20 ./backup_db.sh
+````
+
+See [crontab.example](crontab.example) for complete automation examples.
+
+---

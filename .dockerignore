@@ -1,0 +1,59 @@
+# Build artifacts
+target/
+*.d
+*.so
+*.rlib
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Development files
+.env
+.env.*
+.vscode/
+.idea/
+
+# CI/CD
+.github/
+
+# Test files
+tests/
+benches/
+
+# Backup files
+*.bak
+*.swp
+*.tmp
+*~
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Database files (if present locally)
+*.db
+*.sqlite
+
+# Container files
+compose.yml
+docker-compose.yml
+podman-compose.yml
+Dockerfile
+Containerfile
+
+# Scripts and config
+*.sh
+Makefile
+rust-toolchain.toml
+render.yaml

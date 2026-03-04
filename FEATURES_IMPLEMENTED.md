@@ -9,20 +9,23 @@ Tutte le 11 funzionalità suggerite sono state **completamente implementate e co
 ## 1. ✅ Whitelist Domini Intelligente
 
 **Comandi Aggiunti:**
+
 - `/whitelist` - Menu whitelist
 - `/whitelist_add <domain>` - Aggiungi dominio alla whitelist
 - `/whitelist_remove <domain>` - Rimuovi dominio
 - `/whitelist_show` - Visualizza tutti i domini whitelisted
 
 **Database:**
+
 - Nuova tabella `whitelist_urls` con constraint UNIQUE(user_id, domain)
 - Metodi database:
-  - `add_to_whitelist(user_id, domain)` 
+  - `add_to_whitelist(user_id, domain)`
   - `remove_from_whitelist(user_id, domain)`
-  - `get_whitelist(user_id)` 
+  - `get_whitelist(user_id)`
   - `is_whitelisted(user_id, domain)`
 
 **Logica di Processing:**
+
 - Durante l'elaborazione di URL, il bot estrae il dominio e verifica se è in whitelist
 - Se whitelisted: salta i controlli VirusTotal/URLScan (risparmiando quota)
 - Log: "URL saltato: dominio in whitelist"
@@ -34,6 +37,7 @@ Tutte le 11 funzionalità suggerite sono state **completamente implementate e co
 **Comando:** `/stats`
 
 **Dati Visualizzati:**
+
 - 🔗 URL Elaborati (contatore)
 - ✅ Pulizie Riuscite (contatore)
 - 🏆 Ranking Utente (posizione nella leaderboard globale)
@@ -45,6 +49,7 @@ Tutte le 11 funzionalità suggerite sono state **completamente implementate e co
 - 📊 Statistiche Globali (totale utenti + URL globali puliti)
 
 **Database:**
+
 - Utilizza `get_user_config()`, `get_global_stats()`, `get_top_users()`
 
 ---
@@ -54,16 +59,20 @@ Tutte le 11 funzionalità suggerite sono state **completamente implementate e co
 **Comando:** `/history`
 
 **Funzionalità:**
+
 - Mostra ultimi 10 URL puliti dell'utente
 - Formato:
+
   ```
   1. [URL originale] → [URL pulito] (via [Provider])
   2. ...
   ```
+
 - Se vuota: messaggio "Cronologia Vuota"
 
 **Database:**
-- Utilizza `get_history(user_id, 10)` 
+
+- Utilizza `get_history(user_id, 10)`
 - Ordina per timestamp DESC
 
 ---
@@ -73,6 +82,7 @@ Tutte le 11 funzionalità suggerite sono state **completamente implementate e co
 **Comando:** `/export`
 
 **Output Format:**
+
 ```json
 {
   "user_id": 12345,
@@ -89,6 +99,7 @@ Tutte le 11 funzionalità suggerite sono state **completamente implementate e co
 ```
 
 **Limitazioni:**
+
 - Esporta ultimi 50 URL (per non sovraccaricare)
 - Preview con troncamento a 1000 caratteri per leggibilità
 - Nota: "Per bulk export, contatta l'admin"
@@ -100,9 +111,11 @@ Tutte le 11 funzionalità suggerite sono state **completamente implementate e co
 **Comando:** `/leaderboard`
 
 **Visualizzazione:**
+
 - Top 10 utenti per URL puliti
 - Con medaglie: 🥇 🥈 🥉
 - Formato:
+
   ```
   🥇 #1. [user] – [count] URL puliti
   🥈 #2. [user] – [count] URL puliti
@@ -110,6 +123,7 @@ Tutte le 11 funzionalità suggerite sono state **completamente implementate e co
   ```
 
 **Database:**
+
 - Utilizza `get_top_users(10)`
 
 ---
@@ -119,11 +133,13 @@ Tutte le 11 funzionalità suggerite sono state **completamente implementate e co
 **Comando:** `/trending`
 
 **Visualizzazione:**
+
 - Top 10 URL più puliti da tutti gli utenti
 - Mostra il numero di volte pulito
 - URL lunghi vengono abbreviati (max 50 char)
 
 **Database:**
+
 - Utilizza `get_top_links(10)`
 
 ---
@@ -133,6 +149,7 @@ Tutte le 11 funzionalità suggerite sono state **completamente implementate e co
 **Comando:** `/limits`
 
 **Informazioni Mostrate:**
+
 ```
 ⚡ Limiti API
 
@@ -155,15 +172,18 @@ sottomettere, risparmiando quota del 70%
 **Comando:** `/domains`
 
 **Visualizzazione:**
+
 - Top 10 domini da cui hai pulito URL
 - Conta il numero di pulizie per dominio
 - Utile per identificare pattern di tracking
 
 **Database:**
+
 - Nuovo metodo: `get_domain_cleanup_stats(user_id)`
 - Query SQL con raggruppamento intelligente per dominio
 
 **Formato:**
+
 ```
 🌐 Tuoi Domini Più Puliti
 
@@ -179,6 +199,7 @@ sottomettere, risparmiando quota del 70%
 **Comando:** `/help`
 
 **Aggiornamenti:**
+
 - Suddiviso in categorie logiche:
   - Comandi Principali
   - Statistiche & Dati
@@ -186,10 +207,12 @@ sottomettere, risparmiando quota del 70%
   - Info
 
 **Lingue:**
+
 - ✅ Italiano (completo)
 - ✅ English (completo)
 
 **Parametri Help:**
+
 - Tutti i nuovi 8+ comandi documentati
 - Uso esplicito con parametri (es: `/whitelist_add <domain>`)
 
@@ -198,6 +221,7 @@ sottomettere, risparmiando quota del 70%
 ## 10. ✅ Protezione Whitelist nel Processing
 
 **Implementazione:**
+
 - Nella funzione `handle_message()`, prima di ogni controllo VirusTotal/URLScan
 - Estrae domain usando URL parsing
 - Verifica whitelist: `db.is_whitelisted(user_id, domain).await`
@@ -209,13 +233,16 @@ sottomettere, risparmiando quota del 70%
 ## 11. ✅ Progress Bar nelle Statistiche
 
 **Implementazione:**
+
 - Nel comando `/stats`
 - Basato su `cleaned_count` (0-100 mappato a 0-10 livelli)
 - Visualizzazione:
+
   ```
   Attività (7/10)
   ███████░░
   ```
+
 - Usa █ (pieno) e ░ (vuoto)
 
 ---
@@ -237,16 +264,19 @@ sottomettere, risparmiando quota del 70%
 ## 🔐 Sicurezza & Best Practices
 
 ✅ **Whitelist Prevention:**
+
 - Injection-safe: uso di parameterized queries
 - Domain extraction: URL parsing con crate `url`
 - Option handling: `.as_deref().unwrap_or("Unknown")`
 
 ✅ **Data Export:**
+
 - Limitato a 50 URL (DDoS protection)
 - Timestamp in Unix epoch (privacy)
 - Truncated preview per clarity
 
 ✅ **Database:**
+
 - UNIQUE constraint su (user_id, domain)
 - Proper async/await
 - Error handling con Result<T>

@@ -27,7 +27,7 @@ Usuario invia URL
                 └─→ Mostra risultato
 ```
 
-### Dettagli Tecnici
+### Dettagli Tecnici VirusTotal
 
 - **Metodo di ricerca**: Endpoint diretto `GET /api/v3/urls/{encoded_url}`
   - Base64 URL-safe encoding dell'URL
@@ -39,7 +39,8 @@ Usuario invia URL
   - ✅ Riduce quota API significativamente
 
 - **Log**:
-  ```
+
+  ```text
   VirusTotal: Scansione precedente trovata, utilizzo risultati
   ```
 
@@ -49,9 +50,9 @@ Usuario invia URL
 
 ## URLScan.io
 
-### Flusso di Ricerca
+### Flusso di Ricerca URLScan
 
-```
+```text
 Usuario invia URL
     ↓
 [1] GET /api/v1/search?q=domain:example.com
@@ -69,7 +70,7 @@ Usuario invia URL
                 └─→ Mostra risultato
 ```
 
-### Dettagli Tecnici
+### Dettagli Tecnici URLScan
 
 - **Metodo di ricerca**: Search API `GET /api/v1/search/`
   - Query: `domain:{domain_extracted_from_url}`
@@ -81,7 +82,8 @@ Usuario invia URL
   - ✅ Riduce quota API significativamente
 
 - **Log**:
-  ```
+
+  ```text
   URLScan.io: Scansione precedente trovata
   URLScan.io: Utilizzando scansione precedente
   ```
@@ -92,8 +94,8 @@ Usuario invia URL
 
 ## Confronto delle Due Strategie
 
-| Aspetto | VirusTotal | URLScan |
-|---------|-----------|---------|
+| Aspetto         | VirusTotal                | URLScan                         |
+| --------------- | ------------------------- | ------------------------------- |
 | **Ricerca** | Endpoint diretto | Search API |
 | **Latenza ricerca** | ~50-100ms | ~500ms-1s |
 | **Se trovato** | Risultato immediato | GET result immediato |
@@ -104,28 +106,32 @@ Usuario invia URL
 
 ## Logging e Monitoraggio
 
-### VirusTotal
+### VirusTotal Logging
 
 **Scansione trovata (reusata)**:
-```
+
+```text
 ✓ VirusTotal: Scansione precedente trovata, utilizzo risultati
 ```
 
 **Nuova scansione**:
-```
+
+```text
 ✓ VirusTotal: URL non presente, invio per analisi
 ```
 
-### URLScan
+### URLScan Logging
 
 **Scansione trovata (reusata)**:
-```
+
+```text
 ✓ URLScan.io: Scansione precedente trovata
 ✓ URLScan.io: Utilizzando scansione precedente
 ```
 
 **Nuova scansione**:
-```
+
+```text
 ✓ URLScan.io: Scansione in corso...
 ```
 
@@ -136,10 +142,12 @@ Usuario invia URL
 ### Scenario: 100 URL in un mese
 
 **Senza Cache** (tutti nuovi):
+
 - VirusTotal: 100 richieste (out of 500/mese)
 - URLScan: 100 scansioni (out of ~150/mese) ⚠️ Possibile quota exceeded
 
 **Con Cache** (70% reusati):
+
 - VirusTotal: 30 richieste + 70 ricerche ✅ Ampio margine
 - URLScan: 30 scansioni + 70 ricerche ✅ Ampio margine
 
@@ -154,9 +162,11 @@ Usuario invia URL
    - Nessun comportamento nascosto
 
 2. **Monitorare i log**
+
    ```bash
    grep "precedente trovata" /tmp/bot.log
    ```
+
    - Dovrebbe vedere ~70% di cache hits con uso normale
 
 3. **Per alto volume**
@@ -168,15 +178,18 @@ Usuario invia URL
 ## Troubleshooting
 
 ### "VirusTotal non raggiungibile"
+
 - Bot ha cercato l'URL ma non può raggiungere VirusTotal
 - Il sistema ha fallito nel primo tentativo di GET O POST
 
 ### "VirusTotal: URL non presente"
+
 - Questo è *normale*
 - Significa che l'URL è nuovo per il database VirusTotal
 - Viene inviato per l'analisi automaticamente
 
 ### "URLScan.io: Scansione in corso..." (ogni volta)
+
 - Significa che la ricerca non ha trovato una scansione precedente
 - L'URL è nuovo per URLScan, o la ricerca ha fallito
 - Viene sottomesso di nuovo per l'analisi
@@ -203,4 +216,3 @@ Possibili miglioramenti:
    - Cache hit rate
    - Quota API usage
    - URL reputation distribution
-

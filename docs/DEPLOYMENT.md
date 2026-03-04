@@ -17,12 +17,14 @@ This comprehensive guide covers all deployment scenarios for ClearURLs Bot, from
 ### System Requirements
 
 **Minimum:**
+
 - CPU: 1 core
 - RAM: 512MB
 - Storage: 1GB
 - OS: Linux (Ubuntu 20.04+, Debian 11+, CentOS 8+)
 
 **Recommended:**
+
 - CPU: 2 cores
 - RAM: 1GB
 - Storage: 5GB
@@ -31,15 +33,18 @@ This comprehensive guide covers all deployment scenarios for ClearURLs Bot, from
 ### Software Requirements
 
 **Core:**
+
 - [Rust](https://www.rust-lang.org/tools/install) 1.85+ (MSRV)
 - [Podman](https://podman.io/getting-started/installation) 3.0+
 
 **Optional:**
+
 - [Podman Compose](https://github.com/containers/podman-compose) 1.0+
 - [PostgreSQL](https://www.postgresql.org/download/) 12+ (for production)
 - [Nginx](https://nginx.org/en/install.html) (for reverse proxy)
 
 ### Novità
+
 - Gestione errori migliorata e logging avanzato
 - Modularità estesa (validazione, sanitizzazione, internazionalizzazione)
 - Test automatizzati e cache per performance
@@ -95,11 +100,13 @@ VIRUSTOTAL_API_KEY=your_virustotal_api_key_here
 #### Database Options
 
 **SQLite (Default):**
+
 ```bash
 DATABASE_URL=sqlite:bot.db
 ```
 
 **PostgreSQL (Recommended for Production):**
+
 ```bash
 DATABASE_URL=postgresql://username:password@localhost:5432/clearurls_bot
 ```
@@ -107,16 +114,19 @@ DATABASE_URL=postgresql://username:password@localhost:5432/clearurls_bot
 ### Security Best Practices
 
 1. **Generate Secure Cookie Key**:
+
    ```bash
    openssl rand -hex 32  # Generate 32-character hex string
    ```
 
 2. **File Permissions**:
+
    ```bash
    chmod 600 .env  # Restrict to owner only
    ```
 
 3. **Environment-Specific Configs**:
+
    ```bash
    # Development
    cp .env.example .env.dev
@@ -264,6 +274,7 @@ podman run -d \
 ### Volume Management
 
 **For SQLite:**
+
 ```bash
 # Create data directory
 mkdir -p ./data
@@ -274,6 +285,7 @@ chmod 755 ./data
 ```
 
 **For PostgreSQL:**
+
 ```bash
 # Run PostgreSQL container
 podman run -d \

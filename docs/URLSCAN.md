@@ -40,6 +40,7 @@ URLSCAN_ALERT_ONLY=true
 Sostituisci `your_api_key_here` con la tua API key.
 
 **Modalità Alert-Only:**
+
 - `true` (default): Il bot invia messaggi solo per URL sospetti/pericolosi (score >= 50 o malicious=true)
 - `false`: Il bot invia report dettagliati anche per URL sicuri
 
@@ -57,11 +58,13 @@ pkill clear_urls_bot
 ## Limiti API
 
 ### Account Gratuito
+
 - **Scansioni al minuto**: Circa 2-3 (non documentato ufficialmente)
 - **Scansioni al giorno**: ~100-200 (limite soft)
 - **Visibilità**: Scansioni private disponibili
 
 ### Account Pro/Enterprise
+
 - Limiti più alti e priorità nella coda
 - Ulteriori features come API search e automazione avanzata
 - Maggiori dettagli su [pagina prezzi](https://urlscan.io/pricing/)
@@ -87,7 +90,7 @@ pkill clear_urls_bot
 
 ### Link Malevolo Rilevato
 
-```
+```text
 🚨 ALLERTA SICUREZZA 🚨
 ━━━━━━━━━━━━━━━━
 🌐 URLScan.io Web Reputation
@@ -106,7 +109,7 @@ Potrebbe contenere phishing o malware.
 
 ### URL Verificato Sicuro (solo se URLSCAN_ALERT_ONLY=false)
 
-```
+```text
 ✅ URL VERIFICATO
 ───────────────────
 🌐 URLScan.io Web Reputation
@@ -127,7 +130,8 @@ Potrebbe contenere phishing o malware.
 - **Sicuro**: `malicious=false` - Nessuna minaccia rilevata
 
 La logica è identica a VirusTotal:
-- **VirusTotal**: invia avviso se `malicious > 0` 
+
+- **VirusTotal**: invia avviso se `malicious > 0`
 - **URLScan**: invia avviso se `malicious=true`
 
 Il `score` viene mostrato nel report per riferimento, ma non è usato per decidere se inviare l'avviso.
@@ -145,8 +149,8 @@ Il `score` viene mostrato nel report per riferimento, ma non è usato per decide
 
 Sia URLScan che VirusTotal **seguono la stessa logica di rilevamento**:
 
-| Aspetto | URLScan | VirusTotal |
-|---------|---------|------------|
+| Aspetto              | URLScan                             | VirusTotal                      |
+| -------------------- | ----------------------------------- | ------------------------------- |
 | **Condizione alert** | `malicious=true` | `malicious > 0` |
 | **Message format** | Uguale | Uguale |
 | **Alert-only mode** | Sì (default) | Sì (default) |
@@ -154,8 +158,8 @@ Sia URLScan che VirusTotal **seguono la stessa logica di rilevamento**:
 
 ### Differenze tecniche
 
-| Caratteristica | URLScan.io | VirusTotal |
-|---------------|------------|------------|
+| Caratteristica  | URLScan.io                             | VirusTotal                        |
+| --------------- | -------------------------------------- | --------------------------------- |
 | **Analisi** | Comportamentale (sandbox) | Database + 70+ antivirus |
 | **Cosa rileva** | Phishing, script malevoli, redirect | Malware, virus, trojan |
 | **Report** | Screenshot, risorse, connessioni | Hash file, rilevazioni AV |
@@ -163,6 +167,7 @@ Sia URLScan che VirusTotal **seguono la stessa logica di rilevamento**:
 | **Velocità** | ~5-8 secondi | ~1-2 secondi |
 
 **Raccomandazione:** Usa entrambi per copertura completa!
+
 - VirusTotal: Malware e minacce conosciute
 - URLScan: Phishing e comportamenti sospetti
 
@@ -172,6 +177,7 @@ Sia URLScan che VirusTotal **seguono la stessa logica di rilevamento**:
 
 1. Verifica che `URLSCAN_API_KEY` sia configurato nel file `.env`
 2. Controlla i log del bot per errori API:
+
    ```bash
    tail -f bot.log | grep -i urlscan
    ```
@@ -180,18 +186,20 @@ Sia URLScan che VirusTotal **seguono la stessa logica di rilevamento**:
 
 Se vedi errori 429 nei log:
 
-```
+```text
 ⏱️ URLScan.io: limite richieste raggiunto
 Attendi e riprova.
 ```
 
 **Soluzioni:**
+
 - **Breve termine**: Attendi qualche minuto
 - **Lungo termine**: Abilita solo alert-only mode o considera account premium
 
 ### Scansioni che non completano
 
 URLScan.io a volte impiega più tempo per siti complessi. Il bot:
+
 - Fa 4 tentativi con intervallo 1.5s (max ~6 secondi)
 - Se timeout, restituisce link al report senza score
 - La scansione continua in background su URLScan.io
@@ -207,6 +215,7 @@ URLSCAN_ALERT_ONLY=false
 ## API Documentation
 
 Documentazione ufficiale:
+
 - [URLScan.io API](https://urlscan.io/docs/api/)
 - [Search API](https://urlscan.io/docs/search/)
 - [Rate Limits](https://urlscan.io/docs/api/#rate-limits)
@@ -224,12 +233,14 @@ Il bot continuerà a funzionare normalmente senza le scansioni URLScan.io.
 ## Privacy e Sicurezza
 
 ### Privacy
+
 - Le scansioni sono **private** (parametro `visibility: "private"`)
 - Solo tu puoi vedere i risultati tramite link diretto
 - Gli URL **non** appaiono nella ricerca pubblica di URLScan.io
 - URLScan.io conserva i dati per scopi di ricerca (anonimizzati)
 
 ### Cosa viene analizzato
+
 - Contenuto HTML e risorse caricate (JS, CSS, immagini)
 - Collegamenti ipertestuali e redirect
 - Certificati SSL/TLS
@@ -237,7 +248,9 @@ Il bot continuerà a funzionare normalmente senza le scansioni URLScan.io.
 - Esecuzione di script JavaScript
 
 ### Nota Importante
+
 URLScan.io **visita effettivamente il sito** in una sandbox. Se l'URL contiene:
+
 - Parametri di sessione unici
 - Token di autenticazione
 - Link one-time use
@@ -247,6 +260,7 @@ Considera di disabilitare URLScan.io per tali messaggi.
 ## Alternative Self-Hosted
 
 Per massima privacy:
+
 - [PhishTank](https://www.phishtank.com/) - Database phishing gratuito
 - [Google Safe Browsing API](https://developers.google.com/safe-browsing) - Rilevamento phishing e malware
 - [Wappalyzer](https://www.wappalyzer.com/) - Analisi tecnologie web (no security focus)
@@ -264,6 +278,7 @@ Possibili miglioramenti per l'integrazione URLScan.io:
 - [ ] Integrazione con altre threat intelligence platforms
 
 Per contribuire:
+
 1. Fork il repository
 2. Crea un branch per la tua feature
 3. Implementa miglioramenti

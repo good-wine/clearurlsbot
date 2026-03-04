@@ -9,6 +9,7 @@ A modern, high-performance Rust-based Telegram bot that automatically removes tr
 ## ✨ What's New
 
 **🚀 Major Modernization (v0.1.0+)**
+
 - ✅ Updated to Rust 1.92+ with optimized build configuration
 - ✅ Migrated from Docker to Podman for enhanced security
 - ✅ Fixed all deprecation warnings and modernized codebase
@@ -30,24 +31,18 @@ A modern, high-performance Rust-based Telegram bot that automatically removes tr
 
 - **Smart Language Detection**: Automatically detects and responds in English or Italian based on message context and user settings
 - **Multi-Language Support**: Full i18n support for Italian and English
-- **Dual Security Scanning**: 
+- **Dual Security Scanning**:
   - **VirusTotal**: Real-time malware detection with 70+ antivirus engines
   - **URLScan.io**: Behavioral analysis and web reputation scoring
 - **Granular Control**: Per-chat configuration (Reply/Delete modes) and custom tracking parameter removal
 - **AI Deep Scan**: Optional AI-powered sanitization for complex tracking parameters not covered by standard rules
 - **Shortlink Expansion**: Automatically follows redirects from services like bit.ly or tinyurl to uncover and strip underlying trackers
 - **Deep Auditing**: Track which provider (Amazon, Google, etc.) cleaned each link
-- **Enterprise Ready**: Multi-stage Podman build, automatic configuration validation, and comprehensive security
-- **Group & Private Chat Support**: Works seamlessly in both private conversations and group chats
-
-## 🛠️ Bot Commands
-
-- `/start` - Initial setup, shows your User ID
-- `/help` - Usage instructions and command list  
-- `/menu` - Show quick reply keyboard
-- `/hidekbd` - Hide quick reply keyboard
-- `/settings` - Open in-chat settings menu
-- `/stats` - View your personal cleaning statistics in-chat
+- **Feature Flags System**: 🆕 Gradual rollout and per-user feature control
+- **Rate Limiting**: 🆕 Database-level protection against abuse
+- **Health Monitoring**: 🆕 Built-in health check endpoint for production monitoring
+- **Comprehensive Testing**: 🆕 Full test suite with 30+ test cases
+- **CI/CD Pipeline**: 🆕 Automated testing and deployment via GitHub Actions
 
 ## 🚀 Quick Start
 
@@ -66,6 +61,7 @@ cp .env.example .env
 ```
 
 Edit `.env` with your settings:
+
 ```bash
 TELOXIDE_TOKEN=your_bot_token
 BOT_USERNAME=@your_bot_username
@@ -177,6 +173,7 @@ podman run -d --name clear_urls_bot --pod clear_urls_bot_pod -p 3000:3000 --env-
 ## 🏗️ Technical Architecture
 
 ### Core Technologies
+
 - **Language**: Rust 2021 Edition (MSRV 1.75+, tested on 1.92)
 - **Bot Framework**: Teloxide 0.17 with modern async patterns
 - **Database**: sqlx 0.8 with SQLite/PostgreSQL support
@@ -184,11 +181,13 @@ podman run -d --name clear_urls_bot --pod clear_urls_bot_pod -p 3000:3000 --env-
 - **Observability**: Comprehensive tracing with structured logging
 
 ### Performance Optimizations
+
 - **Build**: Optimized LTO, single codegen unit, panic=abort for releases
 - **Runtime**: Async I/O, connection pooling, efficient caching strategies
 - **Memory**: Zero-copy patterns where possible, minimal allocations
 
 ### Security Features
+
 - **Containerless**: Rootless Podman operation by default
 - **Least Privilege**: Non-root container execution
 - **Secure Defaults**: TLS-only, secure cookie handling, input validation
@@ -250,7 +249,7 @@ podman stats clear_urls_bot
 
 - Backup automatico DB: script backup_db.sh, cron consigliato
 - Esempio cron:
-  - 0 2 * * * /workspaces/clearurlsbot/backup_db.sh
+  - 0 2 ** * /workspaces/clearurlsbot/backup_db.sh
 - Oppure manuale: ./backup_db.sh
 
 ## 📝 License

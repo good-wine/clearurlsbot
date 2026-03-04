@@ -47,6 +47,7 @@ pkill clear_urls_bot
 ## Limiti API
 
 ### Account Gratuito
+
 - **Richieste al minuto**: 4
 - **Richieste al giorno**: 500
 - **Richieste al mese**: 15.500
@@ -102,6 +103,7 @@ Questo link è stato rilevato come sospetto da 3/68 motori di sicurezza.
 
 1. Verifica che `VIRUSTOTAL_API_KEY` sia configurato nel file `.env`
 2. Controlla i log del bot per errori API:
+
    ```bash
    tail -f bot.log | grep -i virustotal
    ```
@@ -125,6 +127,7 @@ VirusTotal può occasionalmente segnalare URL legittimi. I motivi includono:
 ## API Documentation
 
 Documentazione ufficiale API v3:
+
 - [VirusTotal API v3](https://developers.virustotal.com/reference/overview)
 - [URLs Endpoint](https://developers.virustotal.com/reference/url)
 
@@ -147,6 +150,7 @@ Il bot continuerà a funzionare normalmente senza i controlli VirusTotal.
 ## Alternativa Self-Hosted
 
 Per massima privacy, considera di usare:
+
 - [YARA rules](https://github.com/Yara-Rules/rules) per rilevamento locale
 - [ClamAV](https://www.clamav.net/) con database aggiornati
 - [URLhaus](https://urlhaus.abuse.ch/) - database pubblico di URL malware
@@ -161,6 +165,7 @@ Se vuoi migliorare l'integrazione VirusTotal:
 4. Apri una Pull Request
 
 Possibili miglioramenti:
+
 - [ ] Cache Redis per evitare richieste duplicate
 - [ ] Retry automatico con backoff esponenziale
 - [ ] Supporto per submission di nuovi URL
