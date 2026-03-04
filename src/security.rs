@@ -1,9 +1,9 @@
 //! Security middleware and helpers for ClearURLs Bot
 
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use once_cell::sync::Lazy;
 
 /// Simple per-user rate limiter (in-memory, not persistent)
 pub struct RateLimiter {
@@ -44,22 +44,31 @@ pub static RATE_LIMITER: Lazy<RateLimiter> = Lazy::new(|| RateLimiter::new(Durat
 
 mod input_sanitizer {
     /// Sanitizza l'input utente (base, estendibile)
-        use crate::sanitizer::validation::is_valid_url;
-    
-        pub fn sanitize(input: &str) -> String {
-            let mut s = input.trim().replace(|c: char| c.is_control(), "");
-            if s.len() > 4000 {
-                s.truncate(4000);
-            }
-            if !is_valid_url(&s) {
-                log::error!("Input non valido: {}", s);
-                return String::new();
-            }
-            s
+    use crate::sanitizer::validation::is_valid_url;
+
+    pub fn sanitize(input: &str) -> String {
+        let mut s = input.trim().replace(|c: char| c.is_control(), "");
+        if s.len() > 4000 {
+            s.truncate(4000);
+        }
+        if !is_valid_url(&s) {
+            log::error!("Input non valido: {}", s);
+            return String::new();
+        }
+        s
+    }
+
+    /// Sanitizza callback data senza validare come URL
+    pub fn sanitize_callback(input: &str) -> String {
+        let mut s = input.trim().replace(|c: char| c.is_control(), "");
+        if s.len() > 4000 {
+            s.truncate(4000);
+        }
+        s
     }
 }
 
-pub use input_sanitizer::sanitize as sanitize_input;
+pub use input_sanitizer::{sanitize as sanitize_input, sanitize_callback};
 
 /// Checks if a user is admin
 pub fn is_admin(user_id: i64, admin_id: i64) -> bool {

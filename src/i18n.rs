@@ -1,8 +1,6 @@
-use std::fs;
-use serde_json::Value;
-
 /*
 /// Carica traduzioni da file JSON
+/// NOTE: Commented out - unused imports removed
 /// NOTE: This function is currently not used because Translations uses 'static lifetimes
 /// which cannot be satisfied by loading from a file at runtime.
 /// To use dynamic translations, the Translations struct would need to use String instead of &'static str.
@@ -117,11 +115,11 @@ pub fn load_translations_from_file(lang: &str, path: &str) -> Option<Translation
 
 #[derive(Clone, Debug)]
 pub struct Translations {
-        pub cleaning_feedback: &'static str,
-        pub error_feedback: &'static str,
-        pub privacy_mode_enabled: &'static str,
-        pub privacy_mode_disabled: &'static str,
-        pub privacy_mode_desc: &'static str,
+    pub cleaning_feedback: &'static str,
+    pub error_feedback: &'static str,
+    pub privacy_mode_enabled: &'static str,
+    pub privacy_mode_disabled: &'static str,
+    pub privacy_mode_desc: &'static str,
     pub welcome: &'static str,
     pub help_text: &'static str,
     pub unknown_command: &'static str,

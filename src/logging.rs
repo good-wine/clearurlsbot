@@ -1,6 +1,6 @@
 use std::env;
 use tracing_error::ErrorLayer;
-use tracing_subscriber::{EnvFilter, Registry, fmt, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry};
 
 /// Initializes the logging and tracing system.
 ///

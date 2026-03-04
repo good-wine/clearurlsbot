@@ -33,23 +33,23 @@ async fn main() -> anyhow::Result<()> {
     // Canale per eventi real-time (SSE) - kept for bot logic, though not used in GraphQL yet
     let (event_tx, _) = tokio::sync::broadcast::channel::<serde_json::Value>(100);
 
-        let admin_id = config.admin_id;
-        let bot_clone = bot.clone();
-        let panic_hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(move |info| {
-            panic_hook(info);
-            if admin_id != 0 {
-                let msg = format!("[PANIC] {}", info);
-                let bot_for_panic = bot_clone.clone();
-                let _ = std::thread::spawn(move || {
-                    let rt = tokio::runtime::Runtime::new().unwrap();
-                    rt.block_on(async {
-                        let _ = bot_for_panic.send_message(ChatId(admin_id), msg).await;
-                    });
+    let admin_id = config.admin_id;
+    let bot_clone = bot.clone();
+    let panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        panic_hook(info);
+        if admin_id != 0 {
+            let msg = format!("[PANIC] {}", info);
+            let bot_for_panic = bot_clone.clone();
+            let _ = std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async {
+                    let _ = bot_for_panic.send_message(ChatId(admin_id), msg).await;
                 });
-            }
-        }));
-        let bot_task = tokio::spawn(bot::run_bot(
+            });
+        }
+    }));
+    let bot_task = tokio::spawn(bot::run_bot(
         bot,
         db.clone(),
         rules.clone(),

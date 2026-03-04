@@ -9,7 +9,7 @@ pub struct UserConfig {
     pub mode: String,            // "reply" or "delete"
     pub ignored_domains: String, // Comma-separated list
     pub cleaned_count: i64,
-    pub language: String, // "en", "it", etc.
+    pub language: String,  // "en", "it", etc.
     pub privacy_mode: i32, // 1=enabled, 0=disabled
 }
 

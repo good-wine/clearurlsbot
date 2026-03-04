@@ -1,6 +1,6 @@
 use super::models::{ChatConfig, CleanedLink, CustomRule, UserConfig};
 use anyhow::Result;
-use sqlx::{Any, Pool, any::AnyPoolOptions};
+use sqlx::{any::AnyPoolOptions, Any, Pool};
 
 #[derive(Clone)]
 pub struct Db {
@@ -8,25 +8,29 @@ pub struct Db {
 }
 
 impl Db {
-        pub async fn init_tables(&self) -> Result<()> {
-            sqlx::query(
-                "CREATE TABLE IF NOT EXISTS user_configs (
+    pub async fn init_tables(&self) -> Result<()> {
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS user_configs (
                     user_id INTEGER PRIMARY KEY,
                     cleaned_count INTEGER DEFAULT 0,
                     ignored_domains TEXT DEFAULT '',
                     language TEXT DEFAULT 'it',
                     privacy_mode INTEGER DEFAULT 0
-                )"
-            ).execute(&self.pool).await?;
-            sqlx::query(
-                "CREATE TABLE IF NOT EXISTS cleaned_links (
+                )",
+        )
+        .execute(&self.pool)
+        .await?;
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS cleaned_links (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     original_url TEXT NOT NULL,
                     cleaned_url TEXT NOT NULL
-                )"
-            ).execute(&self.pool).await?;
-            Ok(())
-        }
+                )",
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
     pub async fn new(database_url: &str) -> Result<Self> {
         sqlx::any::install_default_drivers();
 
@@ -414,7 +418,7 @@ impl Db {
 
     pub async fn get_top_users(&self, limit: usize) -> Result<Vec<(i64, i64)>> {
         let rows = sqlx::query_as::<_, (i64, i64)>(
-            "SELECT user_id, cleaned_count FROM user_configs ORDER BY cleaned_count DESC LIMIT ?"
+            "SELECT user_id, cleaned_count FROM user_configs ORDER BY cleaned_count DESC LIMIT ?",
         )
         .bind(limit as i64)
         .fetch_all(&self.pool)

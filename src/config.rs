@@ -4,7 +4,8 @@ use std::env;
 
 const DEFAULT_DATABASE_URL: &str = "sqlite:bot.db";
 const DEFAULT_PORT: &str = "3000";
-const DEFAULT_CLEARURLS_SOURCE: &str = "https://raw.githubusercontent.com/ClearURLs/Rules/refs/heads/master/data.min.json";
+const DEFAULT_CLEARURLS_SOURCE: &str =
+    "https://raw.githubusercontent.com/ClearURLs/Rules/refs/heads/master/data.min.json";
 const DEFAULT_AI_API_BASE: &str = "https://api.openai.com/v1";
 const DEFAULT_AI_MODEL: &str = "gpt-3.5-turbo";
 const DEFAULT_INLINE_MAX_RESULTS: usize = 5;
@@ -32,8 +33,10 @@ impl Config {
     pub fn from_env() -> Result<Self> {
         dotenv().ok();
 
-        let bot_token = env::var("TELOXIDE_TOKEN").context("TELOXIDE_TOKEN deve essere impostato")?;
-        let mut bot_username = env::var("BOT_USERNAME").context("BOT_USERNAME deve essere impostato")?;
+        let bot_token =
+            env::var("TELOXIDE_TOKEN").context("TELOXIDE_TOKEN deve essere impostato")?;
+        let mut bot_username =
+            env::var("BOT_USERNAME").context("BOT_USERNAME deve essere impostato")?;
         if bot_username.starts_with('@') {
             bot_username = bot_username[1..].to_string();
         }

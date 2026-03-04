@@ -1,7 +1,7 @@
 use crate::config::Config;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use reqwest::Client;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::time::Duration;
 use tracing::debug;
 
