@@ -1,3 +1,52 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [1.4.0] - 2026-03-04
+
+### 🚀 New Features
+- **VirusTotal Integration**: Complete implementation of VirusTotal API v3 for malware detection
+  - Automatic URL scanning with 70+ antivirus engines
+  - Real-time alerts for malicious and suspicious links
+  - Configurable via `VIRUSTOTAL_API_KEY` environment variable
+  - Comprehensive documentation in `docs/VIRUSTOTAL.md`
+- **Enhanced URL Detection**: Fixed critical bug in URL entity detection
+  - URLs are now correctly identified in both private chats and groups
+  - Improved message processing pipeline with detailed logging
+
+### 🐛 Bug Fixes
+- **Critical**: Fixed `has_urls` flag not being set correctly, causing URLs to be skipped
+  - URLs with `MessageEntityKind::Url` or `MessageEntityKind::TextLink` now properly detected
+  - Commands no longer incorrectly trigger URL processing
+- **Logging**: Added comprehensive debug logging throughout message processing pipeline
+  - "Messaggio ricevuto" logs with user_id, chat_id, and text length
+  - "Nessun URL trovato" vs "URL candidati trovati" for better debugging
+  - "Invio risposta con URL puliti" for tracking successful responses
+
+### 🔧 Technical Improvements
+- **Dependencies**: Added `base64 = "0.22"` for VirusTotal URL encoding
+- **Security**: VirusTotal requests use proper base64 URL-safe encoding without padding
+- **Performance**: 10-second timeout for VirusTotal API calls to prevent blocking
+- **Code Quality**: Improved error handling and logging consistency
+
+### 📚 Documentation
+- **New**: Complete VirusTotal integration guide (`docs/VIRUSTOTAL.md`)
+  - Setup instructions with API key acquisition
+  - Rate limits and free tier details (4 req/min, 500/day)
+  - Privacy considerations and self-hosted alternatives
+  - Troubleshooting and examples
+- **Updated**: README.md with VirusTotal feature details
+- **Updated**: ARCHITECTURE.md with VirusTotal integration section
+- **Updated**: All documentation reflects current codebase state
+
+### ⚠️ Breaking Changes
+None - all changes are backward compatible.
+
+### 🔒 Security
+- VirusTotal integration is fully optional and disabled by default
+- URLs sent to VirusTotal become public in their database (documented)
+- No sensitive data logged or transmitted
+
 ## [1.3.0] - 2026-02-24
 
 ### 🛠 Migliorie principali
@@ -8,7 +57,6 @@
 - Sicurezza input/output rafforzata
 - Internazionalizzazione dinamica tramite file JSON
 - Documentazione aggiornata
-# Changelog
 
 All notable changes to this project will be documented in this file.
 

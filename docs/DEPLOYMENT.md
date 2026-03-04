@@ -82,6 +82,16 @@ AI_API_BASE=https://api.openai.com/v1
 AI_MODEL=gpt-4
 ```
 
+#### Optional VirusTotal Configuration
+
+```bash
+# VirusTotal Malware Detection (Optional)
+# Get your free API key at: https://www.virustotal.com/gui/my-apikey
+# Free tier: 4 requests/minute, 500/day
+# See docs/VIRUSTOTAL.md for complete setup guide
+VIRUSTOTAL_API_KEY=your_virustotal_api_key_here
+```
+
 #### Database Options
 
 **SQLite (Default):**
@@ -127,6 +137,7 @@ DATABASE_URL=postgresql://username:password@localhost:5432/clearurls_bot
 
 ## 🛡️ Sicurezza e Best Practice
 
+- **VirusTotal Security**: 🆕 Real-time malware detection with 70+ antivirus engines (see [docs/VIRUSTOTAL.md](VIRUSTOTAL.md))
 - Rate limiting anti-flood: massimo 1 richiesta/secondo per utente
 - Validazione e sanificazione input su tutti i messaggi/callback
 - Controllo permessi sistematico per azioni admin
@@ -134,11 +145,10 @@ DATABASE_URL=postgresql://username:password@localhost:5432/clearurls_bot
 - Consigliato eseguire il bot in container rootless (Podman) e usare database PostgreSQL in produzione
 - Backup automatico DB: script backup_db.sh, cron consigliato
 - Logging avanzato: solo admin riceve log critici via Telegram
-- Notifiche automatiche errori: messaggio all’admin in caso di panic/errori
+- Notifiche automatiche errori: messaggio all'admin in caso di panic/errori
 - Caching risultati pulizia: cache interna per URL ripetuti
 - Ottimizzazione DB/async: query asincrone, pooling, batch
 - Webhook HTTPS: pronto per refactor, supporto via env
-- Integrazione VirusTotal: controllo link sospetti, avviso all’utente
 
 ## 🏠 Local Development
 

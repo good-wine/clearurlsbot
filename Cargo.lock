@@ -215,6 +215,7 @@ dependencies = [
  "anyhow",
  "async-stream",
  "async-trait",
+ "base64",
  "dotenvy",
  "futures",
  "hex",

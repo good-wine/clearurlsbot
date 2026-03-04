@@ -19,6 +19,7 @@ A modern, high-performance Rust-based Telegram bot that automatically removes tr
 
 - **[Architecture Guide](docs/ARCHITECTURE.md)**: Deep dive into the modular structure and data flow
 - **[Deployment Guide](docs/DEPLOYMENT.md)**: Complete deployment instructions for all environments
+- **[VirusTotal Integration](docs/VIRUSTOTAL.md)**: 🆕 Malware detection setup and configuration
 - **[Contributing](CONTRIBUTING.md)**: How to set up development and submit changes
 - **[Changelog](CHANGELOG.md)**: History of releases and updates
 
@@ -26,11 +27,13 @@ A modern, high-performance Rust-based Telegram bot that automatically removes tr
 
 - **Smart Language Detection**: Automatically detects and responds in English or Italian based on message context and user settings
 - **Multi-Language Support**: Full i18n support for Italian and English
+- **VirusTotal Integration**: 🆕 Real-time malware detection with 70+ antivirus engines before cleaning URLs
 - **Granular Control**: Per-chat configuration (Reply/Delete modes) and custom tracking parameter removal
 - **AI Deep Scan**: Optional AI-powered sanitization for complex tracking parameters not covered by standard rules
 - **Shortlink Expansion**: Automatically follows redirects from services like bit.ly or tinyurl to uncover and strip underlying trackers
 - **Deep Auditing**: Track which provider (Amazon, Google, etc.) cleaned each link
 - **Enterprise Ready**: Multi-stage Podman build, automatic configuration validation, and comprehensive security
+- **Group & Private Chat Support**: Works seamlessly in both private conversations and group chats
 
 ## 🛠️ Bot Commands
 
@@ -69,6 +72,10 @@ AI_API_KEY=your_ai_api_key
 AI_API_BASE=https://api.openai.com/v1
 AI_MODEL=gpt-4
 
+# Optional: VirusTotal integration for malware detection
+# Get your free API key at: https://www.virustotal.com/gui/my-apikey
+VIRUSTOTAL_API_KEY=your_virustotal_api_key
+
 # Optional: max inline results returned by Telegram inline mode (default: 5)
 INLINE_MAX_RESULTS=5
 ```
@@ -99,16 +106,20 @@ podman run -d --name clear_urls_bot --pod clear_urls_bot_pod -p 3000:3000 --env-
 
 ## 🚀 Funzionalità Avanzate
 
+- **VirusTotal Security**: 🆕 Automatic malware detection before URL cleaning ([docs](docs/VIRUSTOTAL.md))
+  - Real-time scanning with 70+ antivirus engines
+  - Detailed threat alerts with detection statistics
+  - Optional feature - fully functional without API key
+  - Free tier: 4 requests/minute, 500/day
 - Statistiche globali e ranking utenti: /topusers, /toplinks
 - Supporto multi-lingua: /language, /setlang <codice>
 - Modalità privacy: /privacy per attivare/disattivare salvataggio cronologia
 - Logging avanzato: solo admin riceve log critici via Telegram
-- Notifiche automatiche errori: messaggio all’admin in caso di panic/errori
+- Notifiche automatiche errori: messaggio all'admin in caso di panic/errori
 - Backup automatico DB: script backup_db.sh, cron consigliato
 - Caching risultati pulizia: cache interna per URL ripetuti
 - Ottimizzazione DB/async: query asincrone, pooling, batch
 - Webhook HTTPS: pronto per refactor, supporto via env
-- Integrazione VirusTotal: controllo link sospetti, avviso all’utente
 
 ## 🛡️ Sicurezza e Best Practice
 

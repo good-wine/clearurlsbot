@@ -67,11 +67,12 @@ src/
 
 ### Processing Pipeline
 1. **Message Reception**: Telegram updates processed via long polling
-2. **URL Detection**: Entity-based detection + regex fallback
+2. **URL Detection**: Entity-based detection (Url, TextLink) + regex fallback
 3. **Context Analysis**: Language detection, user/chat configuration lookup
-4. **Sanitization**: Rule engine → AI engine (optional) → final result
-5. **Persistence**: Audit logging, statistics tracking, user preferences
-6. **Response**: Formatted response with cleaned URLs
+4. **Security Check**: Optional VirusTotal scan for malware detection
+5. **Sanitization**: Rule engine → AI engine (optional) → final result
+6. **Persistence**: Audit logging, statistics tracking, user preferences
+7. **Response**: Formatted response with cleaned URLs and security warnings
 
 ## 📊 Database Schema & Architecture
 
@@ -167,8 +168,28 @@ podman run --pod clear_urls_bot_pod clear_urls_bot
 - **Health Checks**: Application health monitoring
 - **Tracing**: Distributed tracing for request flow analysis
 
+## 🛡️ Security Architecture
+
+### VirusTotal Integration (Optional)
+- **Real-time Malware Detection**: Scans URLs with 70+ antivirus engines before cleaning
+- **API v3 Implementation**: Modern REST API with base64 URL-safe encoding
+- **Threat Intelligence**: 
+  - Malicious: Any engine reports malware → Critical alert
+  - Suspicious: 3+ engines report suspicious behavior → Warning
+  - Clean: No detections → Processing continues normally
+- **Performance**: 10-second timeout prevents blocking, asynchronous execution
+- **Privacy**: Optional feature, URLs sent to VirusTotal become public
+- **Rate Limits**: Free tier supports 4 req/min, 500/day (suitable for small-medium deployments)
+
+### Input Validation & Sanitization
+- **URL Detection**: Entity-based with MessageEntityKind::Url and TextLink support
+- **Callback Sanitization**: Separate validation for callback data (non-URL strings)
+- **Rate Limiting**: Anti-flood protection with 1 request/second per user
+- **Admin Controls**: Systematic permission checks for admin actions
+
 ## 🚀 Funzionalità Avanzate
 
+- **VirusTotal Security**: Real-time malware detection with detailed threat analysis
 - Statistiche globali e ranking utenti: /topusers, /toplinks
 - Supporto multi-lingua: /language, /setlang <codice>
 - Modalità privacy: /privacy per attivare/disattivare salvataggio cronologia

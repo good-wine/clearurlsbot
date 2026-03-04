@@ -4,6 +4,7 @@ use crate::{
     sanitizer::{AiEngine, RuleEngine},
     security::{sanitize_callback, sanitize_input, RATE_LIMITER},
 };
+use base64::prelude::*;
 use regex::Regex;
 use teloxide::prelude::*;
 use teloxide::types::{
@@ -216,6 +217,13 @@ pub async fn handle_message(
         .unwrap_or(0);
     let chat_id = msg.chat.id;
     let msg_text = msg.text().map(|t| t.to_string()).unwrap_or_default();
+    
+    tracing::info!(
+        user_id = user_id,
+        chat_id = %chat_id,
+        text_len = msg_text.len(),
+        "Messaggio ricevuto"
+    );
     let msg_clone = msg.clone();
     let user_config = db.get_user_config(user_id).await.unwrap_or_else(|e| {
         tracing::error!(error = %e, "Errore nel recupero config utente, uso default");
@@ -269,6 +277,17 @@ pub async fn handle_message(
     let tr = i18n::get_translations(lang_code);
 
     let mut has_urls = false;
+    
+    // Check if message has URLs
+    if let Some(ents) = entities.as_ref() {
+        for entity in *ents {
+            if matches!(entity.kind, MessageEntityKind::Url | MessageEntityKind::TextLink { .. }) {
+                has_urls = true;
+                break;
+            }
+        }
+    }
+    
     if let Some(_e) = entities.as_ref() {
         // Handle Commands
         if msg_text.starts_with('/') {
@@ -428,7 +447,7 @@ pub async fn handle_message(
                         .ok();
                 }
             }
-            has_urls = true;
+            return Ok(());
         }
     }
 
@@ -524,6 +543,7 @@ pub async fn handle_message(
     }
 
     if !has_urls {
+        tracing::info!("Nessun URL trovato, skip processing");
         return Ok(());
     }
 
@@ -534,6 +554,8 @@ pub async fn handle_message(
     } else {
         user_config.is_enabled()
     };
+
+    tracing::info!(is_enabled, is_group_context, "Controllo stato attivazione bot");
 
     if !is_enabled {
         tracing::info!(is_group_context, chat_id = %chat_id, "Bot disattivato per questo contesto (skip)");
@@ -552,6 +574,8 @@ pub async fn handle_message(
     let mut cleaned_urls = Vec::new();
 
     let mut url_candidates = Vec::new();
+
+    tracing::info!("Inizio estrazione URL dal messaggio");
 
     // 1. Get URLs from Telegram Entities
     if let Some(ents) = entities {
@@ -589,19 +613,35 @@ pub async fn handle_message(
     }
 
     if url_candidates.is_empty() {
-        tracing::debug!("Nessun URL candidato trovato nel messaggio");
+        tracing::info!("Nessun URL candidato trovato nel messaggio");
         return Ok(());
     }
 
+    tracing::info!(count = url_candidates.len(), "URL candidati trovati, inizio processing");
+
     // 3. Process candidates
     for url_str in url_candidates {
-        // VirusTotal check
-        if let Some(warning) = check_url_virustotal(&url_str).await {
-            bot.send_message(chat_id, warning).await.ok();
-        }
         // 1. Expand shortened URLs first
         let expanded_url = rules.expand_url(&url_str).await;
         let original_url_str = url_str.clone();
+        
+        // VirusTotal check on both original and expanded URL
+        if let Some(warning) = check_url_virustotal(&url_str).await {
+            bot.send_message(chat_id, warning.clone())
+                .parse_mode(ParseMode::Html)
+                .await
+                .ok();
+        }
+        // Also check expanded URL if different from original
+        if expanded_url != url_str {
+            if let Some(warning) = check_url_virustotal(&expanded_url).await {
+                bot.send_message(chat_id, warning.clone())
+                    .parse_mode(ParseMode::Html)
+                    .await
+                    .ok();
+            }
+        }
+        
         let mut current_url = expanded_url.clone();
         // Caching: se già pulito, usa cache
         if let Some(cached) = URL_CACHE.get(&expanded_url).await {
@@ -639,7 +679,10 @@ pub async fn handle_message(
                 .await;
             cleaned_urls.push((original_url_str, current_url, provider));
         } else {
-            tracing::debug!(url = %rules.redact_sensitive(&current_url), "URL gia' pulito");
+            // URL already clean - still add to list for display
+            tracing::debug!(url = %rules.redact_sensitive(&current_url), "URL gia' pulito, nessuna modifica necessaria");
+            
+            // Check if AI should scan even clean URLs
             if user_config.is_ai_enabled() && config.ai_api_key.is_some() {
                 if let Ok(Some(ai_cleaned)) = ai.sanitize(&current_url).await {
                     tracing::info!("URL pulito da fallback AI");
@@ -647,15 +690,21 @@ pub async fn handle_message(
                         .insert(expanded_url.clone(), ai_cleaned.clone())
                         .await;
                     cleaned_urls.push((original_url_str, ai_cleaned, "AI (Deep Scan)".to_string()));
+                    continue;
                 }
             }
+            
+            // Add URL even if already clean (no tracking params found)
+            cleaned_urls.push((original_url_str.clone(), current_url.clone(), "Already Clean".to_string()));
         }
     }
 
     if cleaned_urls.is_empty() {
-        tracing::info!("Elaborazione completata: nessun URL da pulire");
+        tracing::info!("Elaborazione completata: nessun URL da pulire (gia' puliti)");
         return Ok(());
     }
+
+    tracing::info!(count = cleaned_urls.len(), "URL puliti, preparazione risposta");
 
     let _ = db
         .increment_cleaned_count(user_id, cleaned_urls.len() as i64)
@@ -756,23 +805,77 @@ use moka::future::Cache;
 pub static URL_CACHE: once_cell::sync::Lazy<Cache<String, String>> =
     once_cell::sync::Lazy::new(|| Cache::new(10000));
 
+/// Check URL with VirusTotal API v3
+/// 
+/// Returns a warning message if the URL is detected as malicious by VirusTotal.
+/// Requires VIRUSTOTAL_API_KEY environment variable.
 pub async fn check_url_virustotal(url: &str) -> Option<String> {
     let api_key = std::env::var("VIRUSTOTAL_API_KEY").ok()?;
-    let client = reqwest::Client::new();
+    
+    tracing::debug!(url = %url, "Scansione VirusTotal in corso...");
+    
+    // Encode URL in base64 URL-safe format (without padding) for VirusTotal API
+    let url_id = base64::prelude::BASE64_URL_SAFE_NO_PAD.encode(url);
+    
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .ok()?;
+    
+    let endpoint = format!("https://www.virustotal.com/api/v3/urls/{}", url_id);
+    
     let resp = client
-        .get("https://www.virustotal.com/api/v3/urls")
+        .get(&endpoint)
         .header("x-apikey", api_key)
-        .query(&[("url", url)])
         .send()
         .await
         .ok()?;
+    
+    // Check if the response is successful
+    if !resp.status().is_success() {
+        tracing::warn!(status = %resp.status(), url = %url, "VirusTotal API error");
+        return None;
+    }
+    
     let json: serde_json::Value = resp.json().await.ok()?;
-    let verdict = json["data"]["attributes"]["last_analysis_stats"]["malicious"]
-        .as_i64()
-        .unwrap_or(0);
-    if verdict > 0 {
-        Some(format!("⚠️ VirusTotal: il link {} è sospetto!", url))
+    
+    // Parse detection stats
+    let stats = &json["data"]["attributes"]["last_analysis_stats"];
+    let malicious = stats["malicious"].as_i64().unwrap_or(0);
+    let suspicious = stats["suspicious"].as_i64().unwrap_or(0);
+    let total = stats["harmless"].as_i64().unwrap_or(0) 
+        + stats["malicious"].as_i64().unwrap_or(0)
+        + stats["suspicious"].as_i64().unwrap_or(0)
+        + stats["undetected"].as_i64().unwrap_or(0);
+    
+    if malicious > 0 || suspicious > 2 {
+        tracing::warn!(
+            malicious = malicious, 
+            suspicious = suspicious, 
+            total = total,
+            url = %url,
+            "VirusTotal: Minaccia rilevata!"
+        );
+        let msg = if malicious > 0 {
+            format!(
+                "🚨 <b>VirusTotal Allerta</b>\n\
+                ⚠️ Questo link è stato rilevato come <b>dannoso</b> da {}/{} motori di sicurezza.\n\
+                🔒 Si consiglia di <b>NON aprire</b> questo link.",
+                malicious + suspicious,
+                total
+            )
+        } else {
+            format!(
+                "⚠️ <b>VirusTotal Avviso</b>\n\
+                Questo link è stato rilevato come sospetto da {}/{} motori di sicurezza.\n\
+                ⚠️ Procedere con cautela.",
+                suspicious,
+                total
+            )
+        };
+        Some(msg)
     } else {
+        tracing::info!(total = total, url = %url, "VirusTotal: URL sicuro (nessuna minaccia rilevata)");
         None
     }
 }
