@@ -1625,6 +1625,8 @@ pub async fn check_url_urlscan(url: &str) -> Option<String> {
             // Try to extract error details from response body
             let error_details = if let Ok(error_body) = submit_resp.text().await {
                 // Check for specific error messages from URLScan.io
+                
+                // Technical errors that should respect alert_only mode
                 if error_body.contains("URL is too long") || error_body.contains("length") {
                     tracing::warn!(url = %url, "URLScan.io: URL troppo lungo");
                     if alert_only {
@@ -1641,6 +1643,26 @@ pub async fn check_url_urlscan(url: &str) -> Option<String> {
                         di URL shortener (es: bit.ly, tinyurl, ecc.)".to_string()
                     );
                 }
+                
+                // URLScan blocked the scan for technical reasons (not because URL is malicious)
+                if error_body.contains("Scan prevented") 
+                    || error_body.contains("blocked from scanning")
+                    || error_body.contains("URL was blocked") {
+                    tracing::warn!(
+                        url = %url, 
+                        error = %error_body,
+                        "URLScan.io: Scansione bloccata per motivi tecnici (non sicurezza)"
+                    );
+                    // This is a technical limitation, not a security alert
+                    // Always suppress this in alert_only mode
+                    if alert_only {
+                        return None;
+                    }
+                    // In full report mode, still don't show as security alert
+                    // Just log it and skip
+                    return None;
+                }
+                
                 error_body
             } else {
                 "Unknown error".to_string()
