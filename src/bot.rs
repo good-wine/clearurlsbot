@@ -1134,6 +1134,54 @@ pub async fn check_url_virustotal(url: &str) -> Option<String> {
     }
 }
 
+/// Search for existing URLScan.io scans of a URL.
+/// Returns the UUID of an existing scan if found, None otherwise.
+async fn search_existing_urlscan(url: &str, api_key: &str) -> Option<String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .ok()?;
+
+    // URLScan Search API: search for the exact URL using query parameter
+    let search_query = format!("domain:{}", url.split('/').nth(2).unwrap_or(url));
+    
+    let search_resp = match client
+        .get("https://urlscan.io/api/v1/search/")
+        .header("API-Key", api_key)
+        .query(&[("q", search_query.as_str())])
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(_) => return None,
+    };
+
+    if !search_resp.status().is_success() {
+        return None;
+    }
+
+    let search_json: serde_json::Value = match search_resp.json().await {
+        Ok(value) => value,
+        Err(_) => return None,
+    };
+
+    // Get the first result (most recent) that matches the exact URL
+    if let Some(results) = search_json["results"].as_array() {
+        for result in results {
+            if let Some(page_url) = result["page"]["url"].as_str() {
+                if page_url == url {
+                    if let Some(uuid) = result["_id"].as_str() {
+                        tracing::info!(url = %url, uuid = %uuid, "URLScan.io: Scansione precedente trovata");
+                        return Some(uuid.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
 /// Check URL with URLScan.io API.
 ///
 /// Returns a user-facing URLScan.io message with scan outcome.
@@ -1162,115 +1210,129 @@ pub async fn check_url_urlscan(url: &str) -> Option<String> {
         .build()
         .ok()?;
 
-    let submit_resp = match client
-        .post("https://urlscan.io/api/v1/scan/")
-        .header("API-Key", &api_key)
-        .json(&serde_json::json!({ "url": url, "visibility": "private" }))
-        .send()
-        .await
-    {
-        Ok(response) => response,
-        Err(e) => {
-            tracing::warn!(error = %e, url = %url, "URLScan.io: richiesta fallita");
+    // First, try to find an existing scan
+    let mut uuid = search_existing_urlscan(url, &api_key).await;
+    let mut result_link = "https://urlscan.io".to_string();
+    
+    // If not found, submit a new scan
+    if uuid.is_none() {
+        let submit_resp = match client
+            .post("https://urlscan.io/api/v1/scan/")
+            .header("API-Key", &api_key)
+            .json(&serde_json::json!({ "url": url, "visibility": "private" }))
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(e) => {
+                tracing::warn!(error = %e, url = %url, "URLScan.io: richiesta fallita");
+                if alert_only {
+                    return None;
+                }
+                return Some(
+                    "⚠️ <b>URLScan.io non raggiungibile</b>\nRiprova tra qualche minuto.".to_string(),
+                );
+            }
+        };
+
+        if submit_resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            tracing::warn!(url = %url, "URLScan.io: rate limit raggiunto");
             if alert_only {
                 return None;
             }
             return Some(
-                "⚠️ <b>URLScan.io non raggiungibile</b>\nRiprova tra qualche minuto.".to_string(),
+                "⏱️ <b>URLScan.io: limite richieste raggiunto</b>\nAttendi e riprova.".to_string(),
             );
         }
-    };
 
-    if submit_resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        tracing::warn!(url = %url, "URLScan.io: rate limit raggiunto");
-        if alert_only {
-            return None;
-        }
-        return Some(
-            "⏱️ <b>URLScan.io: limite richieste raggiunto</b>\nAttendi e riprova.".to_string(),
-        );
-    }
-
-    if !submit_resp.status().is_success() {
-        let status_code = submit_resp.status();
-        
-        // Try to extract error details from response body
-        let error_details = if let Ok(error_body) = submit_resp.text().await {
-            // Check for specific error messages from URLScan.io
-            if error_body.contains("Malicious Activity Detected") 
-                || error_body.contains("malicious") 
-                || error_body.contains("blocked") {
-                tracing::warn!(
-                    url = %url,
-                    error = %error_body,
-                    "URLScan.io: URL rifiutato - contenuto malevolo o bloccato"
-                );
-                if alert_only {
-                    return None;
+        if !submit_resp.status().is_success() {
+            let status_code = submit_resp.status();
+            
+            // Try to extract error details from response body
+            let error_details = if let Ok(error_body) = submit_resp.text().await {
+                // Check for specific error messages from URLScan.io
+                if error_body.contains("Malicious Activity Detected") 
+                    || error_body.contains("malicious") 
+                    || error_body.contains("blocked") {
+                    tracing::warn!(
+                        url = %url,
+                        error = %error_body,
+                        "URLScan.io: URL rifiutato - contenuto malevolo o bloccato"
+                    );
+                    if alert_only {
+                        return None;
+                    }
+                    return Some(
+                        "🚫 <b>URLScan.io</b>\n\
+                        URL bloccato: questo link è stato classificato come\n\
+                        contenuto malevolo e non può essere scansionato.\n\n\
+                        ⚠️ <b>Si consiglia di NON aprire questo link!</b>".to_string()
+                    );
+                } else if error_body.contains("URL is too long") || error_body.contains("length") {
+                    tracing::warn!(url = %url, "URLScan.io: URL troppo lungo");
+                    if alert_only {
+                        return None;
+                    }
+                    return Some(
+                        "⚠️ <b>URLScan.io</b>\n\
+                        URL troppo lungo per essere scansionato.\n\
+                        Prova con un URL più breve.".to_string()
+                    );
                 }
-                return Some(
-                    "🚫 <b>URLScan.io</b>\n\
-                    URL bloccato: questo link è stato classificato come\n\
-                    contenuto malevolo e non può essere scansionato.\n\n\
-                    ⚠️ <b>Si consiglia di NON aprire questo link!</b>".to_string()
-                );
-            } else if error_body.contains("URL is too long") || error_body.contains("length") {
-                tracing::warn!(url = %url, "URLScan.io: URL troppo lungo");
-                if alert_only {
-                    return None;
-                }
-                return Some(
-                    "⚠️ <b>URLScan.io</b>\n\
-                    URL troppo lungo per essere scansionato.\n\
-                    Prova con un URL più breve.".to_string()
-                );
-            }
-            error_body
-        } else {
-            "Unknown error".to_string()
-        };
-        
-        tracing::warn!(
-            status = %status_code,
-            error = %error_details,
-            url = %url,
-            "URLScan.io API error"
-        );
-        
-        if alert_only {
-            return None;
-        }
-        return Some(format!(
-            "⚠️ <b>URLScan.io: errore API</b>\nCodice: {}",
-            status_code
-        ));
-    }
-
-    let submit_json: serde_json::Value = match submit_resp.json().await {
-        Ok(value) => value,
-        Err(e) => {
-            tracing::warn!(error = %e, url = %url, "URLScan.io: risposta submit non valida");
+                error_body
+            } else {
+                "Unknown error".to_string()
+            };
+            
+            tracing::warn!(
+                status = %status_code,
+                error = %error_details,
+                url = %url,
+                "URLScan.io API error"
+            );
+            
             if alert_only {
                 return None;
             }
-            return Some("⚠️ <b>URLScan.io</b>\nRisposta non valida dal servizio.".to_string());
+            return Some(format!(
+                "⚠️ <b>URLScan.io: errore API</b>\nCodice: {}",
+                status_code
+            ));
         }
-    };
 
-    let uuid = submit_json["uuid"].as_str().map(ToString::to_string);
-    let result_link = submit_json["result"]
-        .as_str()
-        .map(ToString::to_string)
-        .unwrap_or_else(|| "https://urlscan.io".to_string());
+        let submit_json: serde_json::Value = match submit_resp.json().await {
+            Ok(value) => value,
+            Err(e) => {
+                tracing::warn!(error = %e, url = %url, "URLScan.io: risposta submit non valida");
+                if alert_only {
+                    return None;
+                }
+                return Some("⚠️ <b>URLScan.io</b>\nRisposta non valida dal servizio.".to_string());
+            }
+        };
 
-    let Some(uuid) = uuid else {
-        if alert_only {
-            return None;
+        uuid = submit_json["uuid"].as_str().map(ToString::to_string);
+        result_link = submit_json["result"]
+            .as_str()
+            .map(ToString::to_string)
+            .unwrap_or_else(|| "https://urlscan.io".to_string());
+
+        if uuid.is_none() {
+            if alert_only {
+                return None;
+            }
+            return Some(format!(
+                "ℹ️ <b>URLScan.io</b>\nURL inviato per analisi.\n📋 <a href=\"{}\">Apri report</a>",
+                result_link
+            ));
         }
-        return Some(format!(
-            "ℹ️ <b>URLScan.io</b>\nURL inviato per analisi.\n📋 <a href=\"{}\">Apri report</a>",
-            result_link
-        ));
+        
+        // Wait a bit for the scan to start processing before polling
+        tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+    }
+
+    let Some(uuid_ref) = uuid.as_ref() else {
+        return None;
     };
 
     let mut malicious = false;
@@ -1279,7 +1341,7 @@ pub async fn check_url_urlscan(url: &str) -> Option<String> {
 
     for _ in 0..4 {
         tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
-        let result_endpoint = format!("https://urlscan.io/api/v1/result/{uuid}/");
+        let result_endpoint = format!("https://urlscan.io/api/v1/result/{}/", uuid_ref);
         let result_resp = match client
             .get(&result_endpoint)
             .header("API-Key", &api_key)

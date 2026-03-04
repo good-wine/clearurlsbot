@@ -71,10 +71,12 @@ pkill clear_urls_bot
 1. L'utente invia un messaggio con uno o più URL
 2. Il bot estrae tutti gli URL dal messaggio
 3. Per ogni URL:
-   - Sottomette l'URL a URLScan.io con visibilità "private"
+   - **Prima controlla se è già stato scansionato** usando la Search API di URLScan
+   - Se trovata una scansione precedente, utilizza quel report (evita scansioni duplicate)
+   - Se non trovato, sottomette l'URL a URLScan.io con visibilità "private"
    - Attende il completamento della scansione (polling con retry)
-   - Recupera i risultati con punteggio di rischio e flag malicious
-4. Se viene rilevato un URL malevolo (malicious=true):
+   - Recupera i risultati con punteggio di rischio e flag malicious/potentially malicious
+4. Se viene rilevato un URL malevolo (malicious=true OR potentially_malicious):
    - Invia un messaggio di allerta all'utente
    - Mostra il risk score e la classificazione della minaccia
    - Fornisce link al report completo
@@ -132,9 +134,11 @@ Il `score` viene mostrato nel report per riferimento, ma non è usato per decide
 
 ## Performance
 
-- **Timeout**: 15 secondi per richiesta submit
-- **Polling**: Fino a 4 retry con intervallo di 1.5 secondi
-- **Tempo medio**: 5-8 secondi per scansione completa
+- **Ricerca scansioni precedenti**: ~1-2 secondi (evita duplicati)
+- **Submissione nuova scansione**: ~1-2 secondi
+- **Polling risultati**: Fino a 4 retry con intervallo di 1.5 secondi (~6 secondi max)
+- **Tempo medio totale**: 3-8 secondi (5-8 solo se è una nuova scansione)
+- **Vantaggio**: Le scansioni precedenti vengono riutilizzate (niente timeout, risultati istantanei)
 - **Parallelizzazione**: Le richieste sono asincrone
 
 ## Logica Condivisa con VirusTotal
