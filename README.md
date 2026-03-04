@@ -14,12 +14,15 @@ A modern, high-performance Rust-based Telegram bot that automatically removes tr
 - ✅ Fixed all deprecation warnings and modernized codebase
 - ✅ Optimized build times and runtime performance
 - ✅ Enhanced container security with rootless operation
+- ✅ **NEW**: VirusTotal integration for malware detection
+- ✅ **NEW**: URLScan.io integration for web reputation analysis
 
 ## 📖 Documentation
 
 - **[Architecture Guide](docs/ARCHITECTURE.md)**: Deep dive into the modular structure and data flow
 - **[Deployment Guide](docs/DEPLOYMENT.md)**: Complete deployment instructions for all environments
 - **[VirusTotal Integration](docs/VIRUSTOTAL.md)**: 🆕 Malware detection setup and configuration
+- **[URLScan.io Integration](docs/URLSCAN.md)**: 🆕 Web reputation and behavioral analysis
 - **[Contributing](CONTRIBUTING.md)**: How to set up development and submit changes
 - **[Changelog](CHANGELOG.md)**: History of releases and updates
 
@@ -27,7 +30,9 @@ A modern, high-performance Rust-based Telegram bot that automatically removes tr
 
 - **Smart Language Detection**: Automatically detects and responds in English or Italian based on message context and user settings
 - **Multi-Language Support**: Full i18n support for Italian and English
-- **VirusTotal Integration**: 🆕 Real-time malware detection with 70+ antivirus engines before cleaning URLs
+- **Dual Security Scanning**: 
+  - **VirusTotal**: Real-time malware detection with 70+ antivirus engines
+  - **URLScan.io**: Behavioral analysis and web reputation scoring
 - **Granular Control**: Per-chat configuration (Reply/Delete modes) and custom tracking parameter removal
 - **AI Deep Scan**: Optional AI-powered sanitization for complex tracking parameters not covered by standard rules
 - **Shortlink Expansion**: Automatically follows redirects from services like bit.ly or tinyurl to uncover and strip underlying trackers
@@ -74,7 +79,17 @@ AI_MODEL=gpt-4
 
 # Optional: VirusTotal integration for malware detection
 # Get your free API key at: https://www.virustotal.com/gui/my-apikey
+# Free tier: 4 requests/minute, 500/day, 15,500/month
 VIRUSTOTAL_API_KEY=your_virustotal_api_key
+# Send messages only for suspicious/malicious URLs (default: true)
+VIRUSTOTAL_ALERT_ONLY=true
+
+# Optional: URLScan.io integration for web reputation analysis
+# Get API key: https://urlscan.io/user/signup
+# Behavioral analysis with private scans
+URLSCAN_API_KEY=your_urlscan_api_key
+# Send messages only for suspicious/malicious URLs (default: true)
+URLSCAN_ALERT_ONLY=true
 
 # Optional: max inline results returned by Telegram inline mode (default: 5)
 INLINE_MAX_RESULTS=5
@@ -106,16 +121,31 @@ podman run -d --name clear_urls_bot --pod clear_urls_bot_pod -p 3000:3000 --env-
 
 ## 🚀 Funzionalità Avanzate
 
-- **VirusTotal Security**: 🆕 Automatic malware detection before URL cleaning ([docs](docs/VIRUSTOTAL.md))
+### 🛡️ Security Scanning
+
+- **VirusTotal Security**: Automatic malware detection before URL cleaning ([docs](docs/VIRUSTOTAL.md))
   - Real-time scanning with 70+ antivirus engines
   - Detailed threat alerts with detection statistics
-  - Optional feature - fully functional without API key
-  - Free tier: 4 requests/minute, 500/day
+  - Alert-only mode (default) - notifications only for threats
+  - Free tier: 4 requests/minute, 500/day, 15,500/month
+  
+- **URLScan.io Analysis**: Behavioral web reputation scanning ([docs](docs/URLSCAN.md))
+  - Sandbox-based page analysis with screenshot capture
+  - Risk scoring (0-100) and malicious classification
+  - Private scans - your URLs stay confidential
+  - Alert-only mode (default) - notifications only for threats
+  - Phishing and dynamic content detection
+
+### 📊 Statistics & Administration
+
 - Statistiche globali e ranking utenti: /topusers, /toplinks
 - Supporto multi-lingua: /language, /setlang <codice>
 - Modalità privacy: /privacy per attivare/disattivare salvataggio cronologia
 - Logging avanzato: solo admin riceve log critici via Telegram
 - Notifiche automatiche errori: messaggio all'admin in caso di panic/errori
+
+### 🔧 Performance & Reliability
+
 - Backup automatico DB: script backup_db.sh, cron consigliato
 - Caching risultati pulizia: cache interna per URL ripetuti
 - Ottimizzazione DB/async: query asincrone, pooling, batch

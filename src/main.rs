@@ -41,10 +41,39 @@ async fn main() -> anyhow::Result<()> {
                 tracing::info!("ℹ️  VirusTotal: modalità report completa attiva");
             }
         } else {
-            tracing::info!("⚠️  VirusTotal: Scansione malware DISABILITATA (API key non configurata)");
+            tracing::info!(
+                "⚠️  VirusTotal: Scansione malware DISABILITATA (API key non configurata)"
+            );
         }
     } else {
         tracing::info!("⚠️  VirusTotal: Scansione malware DISABILITATA (API key non configurata)");
+    }
+
+    // Check URLScan.io configuration
+    if let Ok(us_key) = std::env::var("URLSCAN_API_KEY") {
+        if !us_key.is_empty() && us_key != "your_urlscan_api_key_here" {
+            tracing::info!("✅ URLScan.io: Scansione web reputation ABILITATA");
+            let us_alert_only = std::env::var("URLSCAN_ALERT_ONLY")
+                .ok()
+                .map(|value| {
+                    let normalized = value.trim().to_ascii_lowercase();
+                    !matches!(normalized.as_str(), "0" | "false" | "no" | "off")
+                })
+                .unwrap_or(true);
+            if us_alert_only {
+                tracing::info!("✅ URLScan.io: modalità SOLO ALLERTA attiva (default)");
+            } else {
+                tracing::info!("ℹ️  URLScan.io: modalità report completa attiva");
+            }
+        } else {
+            tracing::info!(
+                "⚠️  URLScan.io: Scansione web reputation DISABILITATA (API key non configurata)"
+            );
+        }
+    } else {
+        tracing::info!(
+            "⚠️  URLScan.io: Scansione web reputation DISABILITATA (API key non configurata)"
+        );
     }
 
     // Create a custom reqwest client with a longer timeout for Telegram polling
