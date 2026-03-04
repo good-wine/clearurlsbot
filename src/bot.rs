@@ -1625,33 +1625,7 @@ pub async fn check_url_urlscan(url: &str) -> Option<String> {
             // Try to extract error details from response body
             let error_details = if let Ok(error_body) = submit_resp.text().await {
                 // Check for specific error messages from URLScan.io
-                if error_body.contains("Malicious Activity Detected") 
-                    || error_body.contains("malicious") 
-                    || error_body.contains("blocked") {
-                    tracing::warn!(
-                        url = %url,
-                        error = %error_body,
-                        "URLScan.io: URL rifiutato - contenuto malevolo o bloccato"
-                    );
-                    // CRITICAL ALERT: Always show when URL is blocked as malicious
-                    return Some(
-                        "🚫 <b>ALLERTA SICUREZZA</b> 🚫\n\
-                        ━━━━━━━━━━━━━━━━\n\
-                        📌 <b>URLScan.io - Verificazione Reputazione</b>\n\n\
-                        🔴 <b>URL BLOCCATO DAL SISTEMA</b>\n\n\
-                        ⚠️ <b>Motivo:</b>\n\
-                        Questo link è stato classificato come\n\
-                        <b>contenuto malevolo</b> e non può essere scansionato.\n\n\
-                        🛑 <b>AVVISO CRITICO:</b>\n\
-                        <b>NON APRIRE QUESTO LINK!</b>\n\n\
-                        ℹ️ <i>Il link potrebbe contenere malware,\n\
-                        phishing o altro contenuto pericoloso.</i>\n\n\
-                        💡 <b>Azioni consigliate:</b>\n\
-                        • Non cliccare sul link\n\
-                        • Non scaricare file da questo URL\n\
-                        • Segnala il link agli amministratori".to_string()
-                    );
-                } else if error_body.contains("URL is too long") || error_body.contains("length") {
+                if error_body.contains("URL is too long") || error_body.contains("length") {
                     tracing::warn!(url = %url, "URLScan.io: URL troppo lungo");
                     if alert_only {
                         return None;
