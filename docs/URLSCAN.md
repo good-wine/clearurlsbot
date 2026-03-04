@@ -74,44 +74,27 @@ pkill clear_urls_bot
    - Sottomette l'URL a URLScan.io con visibilità "private"
    - Attende il completamento della scansione (polling con retry)
    - Recupera i risultati con punteggio di rischio e flag malicious
-4. Se vengono rilevate minacce (score >= 50.0 o malicious=true):
+4. Se viene rilevato un URL malevolo (malicious=true):
    - Invia un messaggio di allerta all'utente
    - Mostra il risk score e la classificazione della minaccia
    - Fornisce link al report completo
+   - **Stesso comportamento di VirusTotal**: verifica il flag di malware
 5. Procede con la pulizia dell'URL dai parametri di tracciamento
 
 ## Esempi di Avvisi
 
-### Link Ad Alto Rischio
+### Link Malevolo Rilevato
 
 ```
 🚨 ALLERTA SICUREZZA 🚨
-───────────────────
+━━━━━━━━━━━━━━━━
 🌐 URLScan.io Web Reputation
 
-⚠️ 🔴 ALTO RISCHIO
+🔴 LINK PERICOLOSO RILEVATO
 
 📊 Analisi Comportamentale:
-📈 Risk Score: 85.0/100
+📈 Risk Score: 75.0/100
 🔴 Classificato come: MALICIOUS
-
-🔒 ATTENZIONE: Pagina web sospetta
-Potrebbe contenere phishing o malware.
-
-📋 Visualizza Scansione Completa ›
-```
-
-### Link a Rischio Medio
-
-```
-🚨 ALLERTA SICUREZZA 🚨
-───────────────────
-🌐 URLScan.io Web Reputation
-
-🔍 🟡 RISCHIO MEDIO
-
-📊 Analisi Comportamentale:
-📈 Risk Score: 55.0/100
 
 🔒 ATTENZIONE: Pagina web sospetta
 Potrebbe contenere phishing o malware.
@@ -138,11 +121,14 @@ Potrebbe contenere phishing o malware.
 
 ## Soglie di Rilevamento
 
-- **Alto Rischio**: `malicious=true` AND `score >= 75.0`
-- **Rischio Medio**: `score >= 50.0`
-- **Sospetto**: `score >= 25.0` (mostrato solo se alert-only=false)
-- **Basso Rischio**: `score < 25.0`
-- **Completamente Sicuro**: `score = 0.0`
+- **Malevolo** (alert): `malicious=true` - URL rilevato come dannoso
+- **Sicuro**: `malicious=false` - Nessuna minaccia rilevata
+
+La logica è identica a VirusTotal:
+- **VirusTotal**: invia avviso se `malicious > 0` 
+- **URLScan**: invia avviso se `malicious=true`
+
+Il `score` viene mostrato nel report per riferimento, ma non è usato per decidere se inviare l'avviso.
 
 ## Performance
 
@@ -151,20 +137,30 @@ Potrebbe contenere phishing o malware.
 - **Tempo medio**: 5-8 secondi per scansione completa
 - **Parallelizzazione**: Le richieste sono asincrone
 
-## Differenze con VirusTotal
+## Logica Condivisa con VirusTotal
+
+Sia URLScan che VirusTotal **seguono la stessa logica di rilevamento**:
+
+| Aspetto | URLScan | VirusTotal |
+|---------|---------|------------|
+| **Condizione alert** | `malicious=true` | `malicious > 0` |
+| **Message format** | Uguale | Uguale |
+| **Alert-only mode** | Sì (default) | Sì (default) |
+| **Tipo minaccia** | Phishing, comportamenti sospetti | Malware, virus, trojan |
+
+### Differenze tecniche
 
 | Caratteristica | URLScan.io | VirusTotal |
 |---------------|------------|------------|
-| **Tipo analisi** | Comportamentale (sandbox) | Database + antivirus |
+| **Analisi** | Comportamentale (sandbox) | Database + 70+ antivirus |
 | **Cosa rileva** | Phishing, script malevoli, redirect | Malware, virus, trojan |
 | **Report** | Screenshot, risorse, connessioni | Hash file, rilevazioni AV |
-| **Privacy** | Scansioni private disponibili | Tutti gli URL sono pubblici |
+| **Privacy** | Scansioni private | Tutti gli URL pubblici |
 | **Velocità** | ~5-8 secondi | ~1-2 secondi |
-| **Focus** | Contenuti web dinamici | File e malware noti |
 
 **Raccomandazione:** Usa entrambi per copertura completa!
 - VirusTotal: Malware e minacce conosciute
-- URLScan.io: Phishing e comportamenti sospetti
+- URLScan: Phishing e comportamenti sospetti
 
 ## Troubleshooting
 

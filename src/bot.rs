@@ -1307,39 +1307,23 @@ pub async fn check_url_urlscan(url: &str) -> Option<String> {
         break;
     }
 
-    if malicious || score >= 50.0 {
+    if malicious {
         tracing::warn!(url = %url, score = score, malicious = malicious, "URLScan.io: minaccia rilevata");
 
-        let threat_level = if malicious && score >= 75.0 {
-            "🔴 <b>ALTO RISCHIO</b>"
-        } else if score >= 50.0 {
-            "🟡 <b>RISCHIO MEDIO</b>"
-        } else {
-            "🟠 <b>SOSPETTO</b>"
-        };
-
-        let mut msg = format!(
+        let msg = format!(
             "🚨 <b>ALLERTA SICUREZZA</b> 🚨\n\
             ━━━━━━━━━━━━━━━━\n\
             🌐 <b>URLScan.io Web Reputation</b>\n\n\
-            {} {}\n\n\
+            🔴 <b>LINK PERICOLOSO RILEVATO</b>\n\n\
             📊 <b>Analisi Comportamentale:</b>\n\
-            📈 Risk Score: <b>{:.1}/100</b>\n",
-            if malicious { "⚠️" } else { "🔍" },
-            threat_level,
-            score
-        );
-
-        if malicious {
-            msg.push_str("🔴 Classificato come: <b>MALICIOUS</b>\n");
-        }
-
-        msg.push_str(&format!(
-            "\n🔒 <b>ATTENZIONE:</b> Pagina web sospetta\n\
+            📈 Risk Score: <b>{:.1}/100</b>\n\
+            🔴 Classificato come: <b>MALICIOUS</b>\n\
+            \n🔒 <b>ATTENZIONE:</b> Pagina web sospetta\n\
             Potrebbe contenere phishing o malware.\n\n\
             📋 <a href=\"{}\">Visualizza Scansione Completa ›</a>",
+            score,
             result_link
-        ));
+        );
 
         return Some(msg);
     }
