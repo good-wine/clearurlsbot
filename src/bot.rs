@@ -1192,13 +1192,57 @@ pub async fn check_url_urlscan(url: &str) -> Option<String> {
     }
 
     if !submit_resp.status().is_success() {
-        tracing::warn!(status = %submit_resp.status(), url = %url, "URLScan.io API error");
+        let status_code = submit_resp.status();
+        
+        // Try to extract error details from response body
+        let error_details = if let Ok(error_body) = submit_resp.text().await {
+            // Check for specific error messages from URLScan.io
+            if error_body.contains("Malicious Activity Detected") 
+                || error_body.contains("malicious") 
+                || error_body.contains("blocked") {
+                tracing::warn!(
+                    url = %url,
+                    error = %error_body,
+                    "URLScan.io: URL rifiutato - contenuto malevolo o bloccato"
+                );
+                if alert_only {
+                    return None;
+                }
+                return Some(
+                    "🚫 <b>URLScan.io</b>\n\
+                    URL bloccato: questo link è stato classificato come\n\
+                    contenuto malevolo e non può essere scansionato.\n\n\
+                    ⚠️ <b>Si consiglia di NON aprire questo link!</b>".to_string()
+                );
+            } else if error_body.contains("URL is too long") || error_body.contains("length") {
+                tracing::warn!(url = %url, "URLScan.io: URL troppo lungo");
+                if alert_only {
+                    return None;
+                }
+                return Some(
+                    "⚠️ <b>URLScan.io</b>\n\
+                    URL troppo lungo per essere scansionato.\n\
+                    Prova con un URL più breve.".to_string()
+                );
+            }
+            error_body
+        } else {
+            "Unknown error".to_string()
+        };
+        
+        tracing::warn!(
+            status = %status_code,
+            error = %error_details,
+            url = %url,
+            "URLScan.io API error"
+        );
+        
         if alert_only {
             return None;
         }
         return Some(format!(
             "⚠️ <b>URLScan.io: errore API</b>\nCodice: {}",
-            submit_resp.status()
+            status_code
         ));
     }
 
