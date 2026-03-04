@@ -3,14 +3,17 @@
 # linker = "clang"
 # rustflags = ["-C", "link-arg=--ld-path=/usr/local/bin/mold"]
 
-# Parallel frontend (faster)
+# Parallel frontend (faster) - use all CPU cores
 [build]
 jobs = 8
-
-# Incremental compilation
-[profile.dev]
-incremental = true
 
 # Use sparse registry protocol for faster dependency downloads
 [registries.crates-io]
 protocol = "sparse"
+
+# Network settings
+[net]
+git-fetch-with-cli = true
+retry = 3
+
+

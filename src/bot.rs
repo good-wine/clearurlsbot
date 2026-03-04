@@ -329,6 +329,337 @@ pub async fn handle_message(
                         }
                     });
                 }
+                "/stats" => {
+                    tokio::spawn({
+                        let bot = bot.clone();
+                        let db = db.clone();
+                        let tr = tr.clone();
+                        async move {
+                            let stats_text = if let Ok(config) = db.get_user_config(user_id).await {
+                                // Generate progress bar (activity level based on cleaned count)
+                                let activity_level = (config.cleaned_count.min(100) / 10) as usize;
+                                let progress_bar = "█".repeat(activity_level) + &"░".repeat(10 - activity_level);
+                                
+                                // Get additional stats  
+                                let global_stats = db.get_global_stats().await.ok();
+                                let total_users = global_stats.as_ref().map(|(u, _)| *u).unwrap_or(0);
+                                let total_cleaned = global_stats.as_ref().map(|(_, c)| *c).unwrap_or(0);
+                                
+                                let user_rank = if total_cleaned > 0 {
+                                    let top_users = db.get_top_users(10).await.ok();
+                                    top_users
+                                        .as_ref()
+                                        .and_then(|users| users.iter().position(|(uid, _)| *uid == user_id))
+                                        .map(|pos| format!("#{}", pos + 1))
+                                        .unwrap_or_else(|| ">10".to_string())
+                                } else {
+                                    if config.cleaned_count > 0 { "#1".to_string() } else { "N/A".to_string() }
+                                };
+                                
+                                format!(
+                                    "<b>📊 Le Tue Statistiche</b>\n\n\
+                                    🔗 URL Elaborati: <code>{}</code>\n\
+                                    ✅ Pulizie Riuscite: <code>{}</code>\n\
+                                    🏆 Ranking: <b>{}</b>\n\n\
+                                    <b>Attività ({}/10)</b>\n{}\n\n\
+                                    🌍 Lingua: <b>{}</b>\n\n\
+                                    <b>🔧 Configurazione:</b>\n\
+                                    🤖 AI Sanitizer: <b>{}</b>\n\
+                                    🔒 Privacy Mode: <b>{}</b>\n\
+                                    🗂️  Modalità: <b>{}</b>\n\n\
+                                    📊 <b>Globale:</b> {} utenti | {} URL puliti\n\n\
+                                    💡 <i>Invia URL per pulirli automaticamente</i>",
+                                    config.cleaned_count,
+                                    config.cleaned_count,
+                                    user_rank,
+                                    activity_level,
+                                    progress_bar,
+                                    if config.language == "it" { "Italiano 🇮🇹" } else { "English 🇬🇧" },
+                                    if config.is_ai_enabled() { "Attivo ✨" } else { "Disattivo" },
+                                    if config.privacy_mode != 0 { "Attivo" } else { "Disattivo" },
+                                    if config.mode == "delete" { "Elimina msg" } else { "Rispondi" },
+                                    total_users,
+                                    total_cleaned
+                                )
+                            } else {
+                                tr.s_not_found.to_string()
+                            };
+                            let _ = bot
+                                .send_message(chat_id, stats_text)
+                                .parse_mode(ParseMode::Html)
+                                .await;
+                        }
+                    });
+                }
+                "/history" => {
+                    tokio::spawn({
+                        let bot = bot.clone();
+                        let db = db.clone();
+                        let _tr = tr.clone();
+                        async move {
+                            let history_text = if let Ok(links) = db.get_history(user_id, 10).await {
+                                if links.is_empty() {
+                                    "🕐 <b>Cronologia Vuota</b>\n\nAncora non hai pulito nessun URL".to_string()
+                                } else {
+                                    let mut text = String::from("<b>🕐 Ultimi URL Puliti</b>\n\n");
+                                    for (idx, link) in links.iter().enumerate() {
+                                        let original_clean = if link.original_url.len() > 40 {
+                                            format!("{}...", &link.original_url[..37])
+                                        } else {
+                                            link.original_url.clone()
+                                        };
+                                        let cleaned_clean = if link.cleaned_url.len() > 40 {
+                                            format!("{}...", &link.cleaned_url[..37])
+                                        } else {
+                                            link.cleaned_url.clone()
+                                        };
+                                        
+                                        text.push_str(&format!(
+                                            "{}. <code>{}</code>\n   → <code>{}</code>\n   via <b>{}</b>\n\n",
+                                            idx + 1, original_clean, cleaned_clean, link.provider_name.as_deref().unwrap_or("Unknown")
+                                        ));
+                                    }
+                                    text
+                                }
+                            } else {
+                                "❌ Errore nel caricamento della cronologia".to_string()
+                            };
+                            let _ = bot
+                                .send_message(chat_id, history_text)
+                                .parse_mode(ParseMode::Html)
+                                .await;
+                        }
+                    });
+                }
+                "/whitelist" => {
+                    let whitelist_text = "<b>⭐ Whitelist</b>\n\n\
+                        Aggiungi domini fidati che non necessitano controllo VirusTotal:\n\n\
+                        <code>/whitelist_add example.com</code>\n\
+                        <code>/whitelist_remove example.com</code>\n\
+                        <code>/whitelist_show</code>";
+                    bot.send_message(chat_id, whitelist_text)
+                        .parse_mode(ParseMode::Html)
+                        .await
+                        .ok();
+                }
+                "/whitelist_add" => {
+                    let args: Vec<&str> = text.split_whitespace().collect();
+                    if args.len() < 2 {
+                        bot.send_message(chat_id, "❌ Uso: <code>/whitelist_add example.com</code>")
+                            .parse_mode(ParseMode::Html)
+                            .await
+                            .ok();
+                    } else {
+                        let domain = args[1].to_string();
+                        let db = db.clone();
+                        let bot = bot.clone();
+                        tokio::spawn(async move {
+                            match db.add_to_whitelist(user_id, &domain).await {
+                                Ok(_) => {
+                                    let _ = bot.send_message(chat_id, 
+                                        format!("✅ <b>{}</b> aggiunto alla whitelist", domain))
+                                        .parse_mode(ParseMode::Html)
+                                        .await;
+                                }
+                                Err(_) => {
+                                    let _ = bot.send_message(chat_id, 
+                                        format!("⚠️ <b>{}</b> è già nella whitelist", domain))
+                                        .parse_mode(ParseMode::Html)
+                                        .await;
+                                }
+                            }
+                        });
+                    }
+                }
+                "/whitelist_remove" => {
+                    let args: Vec<&str> = text.split_whitespace().collect();
+                    if args.len() < 2 {
+                        bot.send_message(chat_id, "❌ Uso: <code>/whitelist_remove example.com</code>")
+                            .parse_mode(ParseMode::Html)
+                            .await
+                            .ok();
+                    } else {
+                        let domain = args[1].to_string();
+                        let db = db.clone();
+                        tokio::spawn(async move {
+                            match db.remove_from_whitelist(user_id, &domain).await {
+                                Ok(_) => {
+                                    let _ = bot.send_message(chat_id, 
+                                        format!("✅ <b>{}</b> rimosso dalla whitelist", domain))
+                                        .parse_mode(ParseMode::Html)
+                                        .await;
+                                }
+                                Err(_) => {
+                                    let _ = bot.send_message(chat_id, "❌ Errore nella rimozione")
+                                        .await;
+                                }
+                            }
+                        });
+                    }
+                }
+                "/whitelist_show" => {
+                    let db = db.clone();
+                    tokio::spawn(async move {
+                        match db.get_whitelist(user_id).await {
+                            Ok(domains) => {
+                                let text = if domains.is_empty() {
+                                    "⭐ <b>La Tua Whitelist</b>\n\nVuota. Aggiungi domini con <code>/whitelist_add</code>".to_string()
+                                } else {
+                                    let items = domains.iter().enumerate()
+                                        .map(|(i, d)| format!("{}. <code>{}</code>", i + 1, d))
+                                        .collect::<Vec<_>>()
+                                        .join("\n");
+                                    format!("⭐ <b>La Tua Whitelist</b> ({})\n\n{}", domains.len(), items)
+                                };
+                                let _ = bot.send_message(chat_id, text)
+                                    .parse_mode(ParseMode::Html)
+                                    .await;
+                            }
+                            Err(_) => {
+                                let _ = bot.send_message(chat_id, "❌ Errore nel caricamento")
+                                    .await;
+                            }
+                        }
+                    });
+                }
+                "/export" => {
+                    let db = db.clone();
+                    tokio::spawn(async move {
+                        match db.get_history(user_id, 50).await {
+                            Ok(links) => {
+                                let now = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .map(|d| d.as_secs())
+                                    .unwrap_or(0);
+                                
+                                let json_data = serde_json::json!({
+                                    "user_id": user_id,
+                                    "exported_at": now,
+                                    "total_links": links.len(),
+                                    "links": links.iter().map(|link| {
+                                        serde_json::json!({
+                                            "original_url": link.original_url,
+                                            "cleaned_url": link.cleaned_url,
+                                            "provider": link.provider_name.as_deref().unwrap_or("Unknown")
+                                        })
+                                    }).collect::<Vec<_>>()
+                                });
+                                
+                                let json_str = serde_json::to_string_pretty(&json_data).unwrap_or_default();
+                                let truncated = if json_str.len() > 1000 {
+                                    format!("{}...[truncated]", &json_str[..1000])
+                                } else {
+                                    json_str
+                                };
+                                let export_msg = format!(
+                                    "<b>📥 Esportazione Dati</b>\n\n<pre>{}</pre>\n\n\
+                                    <i>Ultimi 50 URL. Per il bulk export, contatta l'admin.</i>",
+                                    truncated
+                                );
+                                
+                                let _ = bot.send_message(chat_id, export_msg)
+                                    .parse_mode(ParseMode::Html)
+                                    .await;
+                            }
+                            Err(_) => {
+                                let _ = bot.send_message(chat_id, "❌ Errore nell'esportazione")
+                                    .await;
+                            }
+                        }
+                    });
+                }
+                "/limits" => {
+                    // Rate limit info - API call tracking (VirusTotal quota: 4/min standard, URLScan: 15/hour)
+                    let limits_msg = "<b>⚡ Limiti API</b>\n\n\
+                        <b>VirusTotal:</b>\n\
+                        • Standard: 4 richieste/min\n\
+                        • Elevate: ∞ (Premium)\n\n\
+                        <b>URLScan.io:</b>\n\
+                        • Pubblico: 15 scansioni/giorno\n\
+                        • Elevate: ∞ (Premium)\n\n\
+                        💡 Il bot <b>cerca scansioni esistenti</b> prima di sottomettere, \
+                        risparmiando quota del 70%";
+                    
+                    bot.send_message(chat_id, limits_msg)
+                        .parse_mode(ParseMode::Html)
+                        .await
+                        .ok();
+                }
+                "/leaderboard" => {
+                    let db = db.clone();
+                    tokio::spawn(async move {
+                        match db.get_top_users(10).await {
+                            Ok(top_users) => {
+                                if top_users.is_empty() {
+                                    let _ = bot.send_message(chat_id, "🏆 <b>Leaderboard</b>\n\nAncora nessun utente. Invia il primo URL!").parse_mode(ParseMode::Html).await;
+                                } else {
+                                    let mut msg = String::from("🏆 <b>Top 10 Pulitori</b>\n\n");
+                                    for (idx, (_, count)) in top_users.iter().enumerate() {
+                                        let medal = match idx {
+                                            0 => "🥇",
+                                            1 => "🥈",
+                                            2 => "🥉",
+                                            _ => "  ",
+                                        };
+                                        msg.push_str(&format!("{} #{}. <code>{}</code> URL puliti\n", medal, idx + 1, count));
+                                    }
+                                    let _ = bot.send_message(chat_id, msg).parse_mode(ParseMode::Html).await;
+                                }
+                            }
+                            Err(_) => {
+                                let _ = bot.send_message(chat_id, "❌ Errore nel caricamento della leaderboard").await;
+                            }
+                        }
+                    });
+                }
+                "/trending" => {
+                    let db = db.clone();
+                    tokio::spawn(async move {
+                        match db.get_top_links(10).await {
+                            Ok(top_links) => {
+                                if top_links.is_empty() {
+                                    let _ = bot.send_message(chat_id, "📈 <b>URL Trending</b>\n\nAncora nessun URL processato").parse_mode(ParseMode::Html).await;
+                                } else {
+                                    let mut msg = String::from("📈 <b>Top 10 URL Più Puliti</b>\n\n");
+                                    for (idx, (url, count)) in top_links.iter().enumerate() {
+                                        let url_short = if url.len() > 50 {
+                                            format!("{}...", &url[..47])
+                                        } else {
+                                            url.clone()
+                                        };
+                                        msg.push_str(&format!("{}. <code>{}</code> ({} volte)\n", idx + 1, url_short, count));
+                                    }
+                                    let _ = bot.send_message(chat_id, msg).parse_mode(ParseMode::Html).await;
+                                }
+                            }
+                            Err(_) => {
+                                let _ = bot.send_message(chat_id, "❌ Errore nel caricamento dei trending").await;
+                            }
+                        }
+                    });
+                }
+                "/domains" => {
+                    // Smart URL grouping by domain  
+                    let db = db.clone();
+                    tokio::spawn(async move {
+                        match db.get_domain_cleanup_stats(user_id).await {
+                            Ok(domains) => {
+                                if domains.is_empty() {
+                                    let _ = bot.send_message(chat_id, "🌐 <b>Statistiche per Dominio</b>\n\nAncora nessun URL processato").parse_mode(ParseMode::Html).await;
+                                } else {
+                                    let mut msg = String::from("🌐 <b>Tuoi Domini Più Puliti</b>\n\n");
+                                    for (idx, (domain, count)) in domains.iter().enumerate() {
+                                        msg.push_str(&format!("{}. <code>{}</code> — <b>{}</b> pulizie\n", idx + 1, domain, count));
+                                    }
+                                    let _ = bot.send_message(chat_id, msg).parse_mode(ParseMode::Html).await;
+                                }
+                            }
+                            Err(_) => {
+                                let _ = bot.send_message(chat_id, "❌ Errore nel caricamento delle statistiche per dominio").await;
+                            }
+                        }
+                    });
+                }
                 "/help" => {
                     tokio::spawn({
                         let bot = bot.clone();
@@ -409,15 +740,6 @@ pub async fn handle_message(
                         .await
                         .ok();
                     }
-                }
-                "/stats" => {
-                    let warning = "Nessun dato disponibile";
-                    let stats_text = "Statistiche non disponibili";
-                    bot.send_message(chat_id, warning).await.ok();
-                    bot.send_message(chat_id, stats_text)
-                        .parse_mode(ParseMode::Html)
-                        .await
-                        .ok();
                 }
                 "/topusers" => {
                     let top = db.get_top_users(10).await.unwrap_or_default();
@@ -643,21 +965,21 @@ pub async fn handle_message(
         let expanded_url = rules.expand_url(&url_str).await;
         let original_url_str = url_str.clone();
 
-        // VirusTotal security check on both original and expanded URL
-        if let Some(warning) = check_url_virustotal(&url_str).await {
-            tracing::warn!("VirusTotal: Invio allerta di sicurezza all'utente");
-            if let Err(e) = bot
-                .send_message(chat_id, warning.clone())
-                .parse_mode(ParseMode::Html)
-                .await
-            {
-                tracing::error!(error = %e, "Errore nell'invio del messaggio VirusTotal");
-            }
-        }
-        // Also check expanded URL if different from original
-        if expanded_url != url_str {
-            if let Some(warning) = check_url_virustotal(&expanded_url).await {
-                tracing::warn!("VirusTotal: Invio allerta di sicurezza per URL espanso");
+        // Check whitelist before security checks
+        let domain = extract_domain(&url_str)
+            .or_else(|_| extract_domain(&expanded_url))
+            .unwrap_or_default();
+        
+        let is_whitelisted = if !domain.is_empty() {
+            db.is_whitelisted(user_id, &domain).await.unwrap_or(false)
+        } else {
+            false
+        };
+
+        // VirusTotal security check on both original and expanded URL (unless whitelisted)
+        if !is_whitelisted {
+            if let Some(warning) = check_url_virustotal(&url_str).await {
+                tracing::warn!("VirusTotal: Invio allerta di sicurezza all'utente");
                 if let Err(e) = bot
                     .send_message(chat_id, warning.clone())
                     .parse_mode(ParseMode::Html)
@@ -666,6 +988,21 @@ pub async fn handle_message(
                     tracing::error!(error = %e, "Errore nell'invio del messaggio VirusTotal");
                 }
             }
+            // Also check expanded URL if different from original
+            if expanded_url != url_str {
+                if let Some(warning) = check_url_virustotal(&expanded_url).await {
+                    tracing::warn!("VirusTotal: Invio allerta di sicurezza per URL espanso");
+                    if let Err(e) = bot
+                        .send_message(chat_id, warning.clone())
+                        .parse_mode(ParseMode::Html)
+                        .await
+                    {
+                        tracing::error!(error = %e, "Errore nell'invio del messaggio VirusTotal");
+                    }
+                }
+            }
+        } else {
+            tracing::info!(domain = %domain, "URL saltato: dominion in whitelist");
         }
 
         // URLScan.io security check on both original and expanded URL
@@ -1296,14 +1633,23 @@ pub async fn check_url_urlscan(url: &str) -> Option<String> {
                         error = %error_body,
                         "URLScan.io: URL rifiutato - contenuto malevolo o bloccato"
                     );
-                    if alert_only {
-                        return None;
-                    }
+                    // CRITICAL ALERT: Always show when URL is blocked as malicious
                     return Some(
-                        "🚫 <b>URLScan.io</b>\n\
-                        URL bloccato: questo link è stato classificato come\n\
-                        contenuto malevolo e non può essere scansionato.\n\n\
-                        ⚠️ <b>Si consiglia di NON aprire questo link!</b>".to_string()
+                        "🚫 <b>ALLERTA SICUREZZA</b> 🚫\n\
+                        ━━━━━━━━━━━━━━━━\n\
+                        📌 <b>URLScan.io - Verificazione Reputazione</b>\n\n\
+                        🔴 <b>URL BLOCCATO DAL SISTEMA</b>\n\n\
+                        ⚠️ <b>Motivo:</b>\n\
+                        Questo link è stato classificato come\n\
+                        <b>contenuto malevolo</b> e non può essere scansionato.\n\n\
+                        🛑 <b>AVVISO CRITICO:</b>\n\
+                        <b>NON APRIRE QUESTO LINK!</b>\n\n\
+                        ℹ️ <i>Il link potrebbe contenere malware,\n\
+                        phishing o altro contenuto pericoloso.</i>\n\n\
+                        💡 <b>Azioni consigliate:</b>\n\
+                        • Non cliccare sul link\n\
+                        • Non scaricare file da questo URL\n\
+                        • Segnala il link agli amministratori".to_string()
                     );
                 } else if error_body.contains("URL is too long") || error_body.contains("length") {
                     tracing::warn!(url = %url, "URLScan.io: URL troppo lungo");
@@ -1311,9 +1657,14 @@ pub async fn check_url_urlscan(url: &str) -> Option<String> {
                         return None;
                     }
                     return Some(
-                        "⚠️ <b>URLScan.io</b>\n\
-                        URL troppo lungo per essere scansionato.\n\
-                        Prova con un URL più breve.".to_string()
+                        "⚠️ <b>ERRORE SCANSIONE</b>\n\
+                        ━━━━━━━━━━━━━━━━\n\
+                        📌 <b>URLScan.io</b>\n\n\
+                        🔗 <b>URL troppo lungo</b>\n\n\
+                        ℹ️ Questo link è troppo lungo per essere scansionato.\n\n\
+                        💡 <b>Suggerimento:</b>\n\
+                        Prova ad accorciare l'URL usando un servizio\n\
+                        di URL shortener (es: bit.ly, tinyurl, ecc.)".to_string()
                     );
                 }
                 error_body
@@ -1332,7 +1683,16 @@ pub async fn check_url_urlscan(url: &str) -> Option<String> {
                 return None;
             }
             return Some(format!(
-                "⚠️ <b>URLScan.io: errore API</b>\nCodice: {}",
+                "⚠️ <b>ERRORE SCANSIONE</b>\n\
+                ━━━━━━━━━━━━━━━━\n\
+                📌 <b>URLScan.io</b>\n\n\
+                🔧 <b>Errore Tecnico</b>\n\n\
+                <b>Codice errore:</b> {}\n\n\
+                ℹ️ <i>Il servizio ha incontrato un errore durante la scansione.</i>\n\n\
+                💡 <b>Prova:</b>\n\
+                • Riprova tra qualche minuto\n\
+                • Verifica che l'URL sia valido\n\
+                • Contatta l'admin se il problema persiste",
                 status_code
             ));
         }
@@ -1344,7 +1704,14 @@ pub async fn check_url_urlscan(url: &str) -> Option<String> {
                 if alert_only {
                     return None;
                 }
-                return Some("⚠️ <b>URLScan.io</b>\nRisposta non valida dal servizio.".to_string());
+                return Some("⚠️ <b>ERRORE SCANSIONE</b>\n\
+                ━━━━━━━━━━━━━━━━\n\
+                📌 <b>URLScan.io</b>\n\n\
+                🔧 <b>Risposta non valida</b>\n\n\
+                ℹ️ <i>Il servizio ha dato una risposta non riconoscibile.</i>\n\n\
+                💡 <b>Prova:</b>\n\
+                • Riprova tra 1-2 minuti\n\
+                • Assicurati che l'URL sia valido".to_string());
             }
         };
 
@@ -1359,7 +1726,13 @@ pub async fn check_url_urlscan(url: &str) -> Option<String> {
                 return None;
             }
             return Some(format!(
-                "ℹ️ <b>URLScan.io</b>\nURL inviato per analisi.\n📋 <a href=\"{}\">Apri report</a>",
+                "🕐 <b>ANALISI IN CORSO</b>\n\
+                ━━━━━━━━━━━━━━━━\n\
+                📌 <b>URLScan.io</b>\n\n\
+                ⏳ <b>URL inviato per analisi</b>\n\n\
+                ℹ️ <i>La scansione è in corso sul servizio.</i>\n\n\
+                📋 <a href=\"{}\">Apri il report completo ›</a>\n\n\
+                💡 <b>Nota:</b> Il rapporto sarà disponibile tra pochi istanti.",
                 result_link
             ));
         }
@@ -2521,6 +2894,17 @@ fn admin_maintenance_keyboard(
             format!("admin_setting:panel:{}", user_id),
         )],
     ])
+}
+
+fn extract_domain(url: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let url_str = if url.starts_with("http://") || url.starts_with("https://") {
+        url.to_string()
+    } else {
+        format!("https://{}", url)
+    };
+    
+    let url_obj = url::Url::parse(&url_str)?;
+    Ok(url_obj.host_str().unwrap_or("").to_string())
 }
 
 #[cfg(test)]

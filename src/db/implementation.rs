@@ -221,6 +221,25 @@ impl Db {
                 .await?;
         }
 
+        let create_whitelist = if is_sqlite {
+            "CREATE TABLE IF NOT EXISTS whitelist_urls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                domain TEXT NOT NULL,
+                added_at INTEGER NOT NULL,
+                UNIQUE(user_id, domain)
+            )"
+        } else {
+            "CREATE TABLE IF NOT EXISTS whitelist_urls (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                domain TEXT NOT NULL,
+                added_at BIGINT NOT NULL,
+                UNIQUE(user_id, domain)
+            )"
+        };
+        sqlx::query(create_whitelist).execute(&self.pool).await?;
+
         Ok(())
     }
 
@@ -435,4 +454,72 @@ impl Db {
         .await?;
         Ok(rows)
     }
+
+    pub async fn add_to_whitelist(&self, user_id: i64, domain: &str) -> Result<()> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs() as i64;
+
+        sqlx::query("INSERT INTO whitelist_urls (user_id, domain, added_at) VALUES (?, ?, ?)")
+            .bind(user_id)
+            .bind(domain)
+            .bind(now)
+            .execute(&self.pool)
+            .await?;
+        
+        Ok(())
+    }
+
+    pub async fn remove_from_whitelist(&self, user_id: i64, domain: &str) -> Result<()> {
+        sqlx::query("DELETE FROM whitelist_urls WHERE user_id = ? AND domain = ?")
+            .bind(user_id)
+            .bind(domain)
+            .execute(&self.pool)
+            .await?;
+        
+        Ok(())
+    }
+
+    pub async fn get_whitelist(&self, user_id: i64) -> Result<Vec<String>> {
+        let rows = sqlx::query_as::<_, (String,)>(
+            "SELECT domain FROM whitelist_urls WHERE user_id = ? ORDER BY added_at DESC"
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+        
+        Ok(rows.into_iter().map(|(domain,)| domain).collect())
+    }
+
+    pub async fn is_whitelisted(&self, user_id: i64, domain: &str) -> Result<bool> {
+        let result = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM whitelist_urls WHERE user_id = ? AND domain = ?"
+        )
+        .bind(user_id)
+        .bind(domain)
+        .fetch_one(&self.pool)
+        .await?;
+        
+        Ok(result > 0)
+    }
+
+    pub async fn get_domain_cleanup_stats(&self, user_id: i64) -> Result<Vec<(String, i64)>> {
+        let rows = sqlx::query_as::<_, (String, i64)>(
+            "SELECT 
+                SUBSTR(original_url, INSTR(original_url, '://') + 3, 
+                       INSTR(SUBSTR(original_url, INSTR(original_url, '://') + 3), '/') - 1) as domain,
+                COUNT(*) as clean_count
+             FROM cleaned_links 
+             WHERE user_id = ? 
+             GROUP BY domain 
+             ORDER BY clean_count DESC 
+             LIMIT 10"
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+        
+        Ok(rows)
+    }
 }
+

@@ -1,0 +1,137 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "check (fast)",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["check", "--release"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": ["$rustc"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "build (debug - optimized)",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["build"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": ["$rustc"],
+      "group": "build"
+    },
+    {
+      "label": "build (release - full optimization)",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["build", "--release"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": ["$rustc"],
+      "group": "build"
+    },
+    {
+      "label": "clippy (linter)",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["clippy", "--release", "--", "-D", "warnings"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": ["$rustc"],
+      "group": "build"
+    },
+    {
+      "label": "test",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["test", "--release"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": ["$rustc"],
+      "group": "test"
+    },
+    {
+      "label": "fmt (format check)",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["fmt", "--", "--check"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": ["$rustc"],
+      "group": "build"
+    },
+    {
+      "label": "fmt (auto-fix)",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["fmt"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": ["$rustc"],
+      "group": "build"
+    },
+    {
+      "label": "clean",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["clean"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "group": "build"
+    },
+    {
+      "label": "ci (full pipeline)",
+      "type": "shell",
+      "command": "bash",
+      "args": ["-c", "cargo clean && cargo check --release && cargo clippy --release -- -D warnings && cargo test --release"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": ["$rustc"],
+      "group": "build"
+    },
+    {
+      "label": "make help",
+      "type": "shell",
+      "command": "make",
+      "args": ["help"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "group": "build"
+    },
+    {
+      "label": "show binary size",
+      "type": "shell",
+      "command": "make",
+      "args": ["size"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "group": "build"
+    }
+  ]
+}
