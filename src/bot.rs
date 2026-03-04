@@ -898,6 +898,7 @@ pub async fn check_url_virustotal(url: &str) -> Option<String> {
         }
     };
 
+    // Check if URL already exists in VirusTotal database
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
         tracing::info!(url = %url, "VirusTotal: URL non presente, invio per analisi");
 
@@ -985,6 +986,11 @@ pub async fn check_url_virustotal(url: &str) -> Option<String> {
             "⚠️ <b>VirusTotal: errore API</b>\nCodice: {}",
             resp.status()
         ));
+    }
+
+    // URL already exists in VirusTotal, use existing scan results
+    if resp.status() == reqwest::StatusCode::OK && resp.status() != reqwest::StatusCode::NOT_FOUND {
+        tracing::info!(url = %url, "VirusTotal: Scansione precedente trovata, utilizzo risultati");
     }
 
     let json: serde_json::Value = match resp.json().await {
