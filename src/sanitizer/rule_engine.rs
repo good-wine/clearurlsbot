@@ -210,6 +210,17 @@ impl RuleEngine {
         redacted
     }
 
+    pub fn is_supported_by_clearurls(&self, text: &str) -> bool {
+        if let Ok(providers) = self.providers.read() {
+            for provider in providers.iter() {
+                if provider.url_pattern.is_match(text) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     fn clean_github_url(&self, url: &mut Url) -> bool {
         if let Some(host) = url.host_str() {
             if host == "github.com" {

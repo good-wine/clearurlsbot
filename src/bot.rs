@@ -94,6 +94,9 @@ pub async fn handle_inline_query(
 
     for (idx, original) in urls.iter().enumerate() {
         let expanded = rules.expand_url(original).await;
+        if !rules.is_supported_by_clearurls(&expanded) {
+            continue;
+        }
         let mut final_url = expanded.clone();
 
         if let Some((cleaned, _provider)) =
@@ -286,6 +289,11 @@ pub async fn handle_message(
                 break;
             }
         }
+    }
+
+    // Fallback: alcune URL non vengono marcate come entity da Telegram
+    if !has_urls {
+        has_urls = !extract_url_candidates(text).is_empty();
     }
     
     if let Some(_e) = entities.as_ref() {
@@ -625,21 +633,32 @@ pub async fn handle_message(
         let expanded_url = rules.expand_url(&url_str).await;
         let original_url_str = url_str.clone();
         
-        // VirusTotal check on both original and expanded URL
+        // VirusTotal security check on both original and expanded URL
         if let Some(warning) = check_url_virustotal(&url_str).await {
-            bot.send_message(chat_id, warning.clone())
+            tracing::warn!("VirusTotal: Invio allerta di sicurezza all'utente");
+            if let Err(e) = bot.send_message(chat_id, warning.clone())
                 .parse_mode(ParseMode::Html)
                 .await
-                .ok();
+            {
+                tracing::error!(error = %e, "Errore nell'invio del messaggio VirusTotal");
+            }
         }
         // Also check expanded URL if different from original
         if expanded_url != url_str {
             if let Some(warning) = check_url_virustotal(&expanded_url).await {
-                bot.send_message(chat_id, warning.clone())
+                tracing::warn!("VirusTotal: Invio allerta di sicurezza per URL espanso");
+                if let Err(e) = bot.send_message(chat_id, warning.clone())
                     .parse_mode(ParseMode::Html)
                     .await
-                    .ok();
+                {
+                    tracing::error!(error = %e, "Errore nell'invio del messaggio VirusTotal");
+                }
             }
+        }
+
+        if !rules.is_supported_by_clearurls(&expanded_url) {
+            tracing::debug!(url = %rules.redact_sensitive(&expanded_url), "URL non supportato da ClearURLs, skip pulizia");
+            continue;
         }
         
         let mut current_url = expanded_url.clone();
@@ -679,23 +698,7 @@ pub async fn handle_message(
                 .await;
             cleaned_urls.push((original_url_str, current_url, provider));
         } else {
-            // URL already clean - still add to list for display
-            tracing::debug!(url = %rules.redact_sensitive(&current_url), "URL gia' pulito, nessuna modifica necessaria");
-            
-            // Check if AI should scan even clean URLs
-            if user_config.is_ai_enabled() && config.ai_api_key.is_some() {
-                if let Ok(Some(ai_cleaned)) = ai.sanitize(&current_url).await {
-                    tracing::info!("URL pulito da fallback AI");
-                    URL_CACHE
-                        .insert(expanded_url.clone(), ai_cleaned.clone())
-                        .await;
-                    cleaned_urls.push((original_url_str, ai_cleaned, "AI (Deep Scan)".to_string()));
-                    continue;
-                }
-            }
-            
-            // Add URL even if already clean (no tracking params found)
-            cleaned_urls.push((original_url_str.clone(), current_url.clone(), "Already Clean".to_string()));
+            tracing::debug!(url = %rules.redact_sensitive(&current_url), "URL supportato ma senza parametri da pulire");
         }
     }
 
@@ -807,76 +810,256 @@ pub static URL_CACHE: once_cell::sync::Lazy<Cache<String, String>> =
 
 /// Check URL with VirusTotal API v3
 /// 
-/// Returns a warning message if the URL is detected as malicious by VirusTotal.
+/// Returns a user-facing VirusTotal message with scan outcome.
 /// Requires VIRUSTOTAL_API_KEY environment variable.
 pub async fn check_url_virustotal(url: &str) -> Option<String> {
-    let api_key = std::env::var("VIRUSTOTAL_API_KEY").ok()?;
+    let alert_only = std::env::var("VIRUSTOTAL_ALERT_ONLY")
+        .ok()
+        .map(|value| {
+            let normalized = value.trim().to_ascii_lowercase();
+            !matches!(normalized.as_str(), "0" | "false" | "no" | "off")
+        })
+        .unwrap_or(true);
+
+    let api_key = match std::env::var("VIRUSTOTAL_API_KEY") {
+        Ok(key) if !key.is_empty() && key != "your_virustotal_api_key_here" => key,
+        _ => {
+            tracing::debug!("VirusTotal: API key non configurata, scansione disabilitata");
+            return None;
+        }
+    };
     
-    tracing::debug!(url = %url, "Scansione VirusTotal in corso...");
-    
-    // Encode URL in base64 URL-safe format (without padding) for VirusTotal API
-    let url_id = base64::prelude::BASE64_URL_SAFE_NO_PAD.encode(url);
-    
+    tracing::info!(url = %url, "VirusTotal: Scansione in corso...");
+
+    let encoded_url = base64::prelude::BASE64_URL_SAFE_NO_PAD.encode(url);
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .ok()?;
-    
-    let endpoint = format!("https://www.virustotal.com/api/v3/urls/{}", url_id);
-    
-    let resp = client
-        .get(&endpoint)
-        .header("x-apikey", api_key)
-        .send()
-        .await
-        .ok()?;
-    
-    // Check if the response is successful
+
+    let endpoint = format!("https://www.virustotal.com/api/v3/urls/{encoded_url}");
+
+    let mut lookup_id = encoded_url.clone();
+
+    let mut resp = match client.get(&endpoint).header("x-apikey", &api_key).send().await {
+        Ok(response) => response,
+        Err(e) => {
+            tracing::warn!(error = %e, url = %url, "VirusTotal: richiesta fallita");
+            if alert_only {
+                return None;
+            }
+            return Some("⚠️ <b>VirusTotal non raggiungibile</b>\nRiprova tra qualche minuto.".to_string());
+        }
+    };
+
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        tracing::info!(url = %url, "VirusTotal: URL non presente, invio per analisi");
+
+        let submit_resp = match client
+            .post("https://www.virustotal.com/api/v3/urls")
+            .header("x-apikey", &api_key)
+            .form(&[("url", url)])
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(e) => {
+                tracing::warn!(error = %e, url = %url, "VirusTotal: submit fallito");
+                if alert_only {
+                    return None;
+                }
+                return Some("⚠️ <b>VirusTotal: invio analisi fallito</b>\nRiprova tra qualche minuto.".to_string());
+            }
+        };
+
+        if submit_resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            tracing::warn!(url = %url, "VirusTotal: rate limit raggiunto");
+            if alert_only {
+                return None;
+            }
+            return Some("⏱️ <b>VirusTotal: limite richieste raggiunto</b>\nAttendi circa 1 minuto e riprova.".to_string());
+        }
+
+        if !submit_resp.status().is_success() {
+            tracing::warn!(status = %submit_resp.status(), url = %url, "VirusTotal: submit API error");
+            if alert_only {
+                return None;
+            }
+            return Some(format!(
+                "⚠️ <b>VirusTotal: errore API</b>\nCodice: {}",
+                submit_resp.status()
+            ));
+        }
+
+        if let Ok(submit_json) = submit_resp.json::<serde_json::Value>().await {
+            if let Some(id) = submit_json["data"]["id"].as_str() {
+                lookup_id = id.to_string();
+            }
+        }
+
+        tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+        let submitted_endpoint = format!("https://www.virustotal.com/api/v3/urls/{lookup_id}");
+        resp = match client
+            .get(&submitted_endpoint)
+            .header("x-apikey", &api_key)
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(e) => {
+                tracing::warn!(error = %e, url = %url, "VirusTotal: recupero report fallito dopo submit");
+                if alert_only {
+                    return None;
+                }
+                return Some("ℹ️ <b>VirusTotal</b>\nURL inviato per analisi. Report non ancora disponibile, riprova tra poco.".to_string());
+            }
+        };
+    }
+
+    if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        tracing::warn!(url = %url, "VirusTotal: rate limit raggiunto");
+        if alert_only {
+            return None;
+        }
+        return Some("⏱️ <b>VirusTotal: limite richieste raggiunto</b>\nAttendi circa 1 minuto e riprova.".to_string());
+    }
+
     if !resp.status().is_success() {
         tracing::warn!(status = %resp.status(), url = %url, "VirusTotal API error");
-        return None;
+        if alert_only {
+            return None;
+        }
+        return Some(format!(
+            "⚠️ <b>VirusTotal: errore API</b>\nCodice: {}",
+            resp.status()
+        ));
     }
-    
-    let json: serde_json::Value = resp.json().await.ok()?;
+
+    let json: serde_json::Value = match resp.json().await {
+        Ok(value) => value,
+        Err(e) => {
+            tracing::warn!(error = %e, url = %url, "VirusTotal: risposta JSON non valida");
+            if alert_only {
+                return None;
+            }
+            return Some("⚠️ <b>VirusTotal</b>\nImpossibile leggere la risposta dell'analisi.".to_string());
+        }
+    };
     
     // Parse detection stats
     let stats = &json["data"]["attributes"]["last_analysis_stats"];
     let malicious = stats["malicious"].as_i64().unwrap_or(0);
     let suspicious = stats["suspicious"].as_i64().unwrap_or(0);
-    let total = stats["harmless"].as_i64().unwrap_or(0) 
-        + stats["malicious"].as_i64().unwrap_or(0)
-        + stats["suspicious"].as_i64().unwrap_or(0)
-        + stats["undetected"].as_i64().unwrap_or(0);
+    let harmless = stats["harmless"].as_i64().unwrap_or(0);
+    let undetected = stats["undetected"].as_i64().unwrap_or(0);
+    let total = harmless + malicious + suspicious + undetected;
+    
+    // Get last analysis date if available
+    let last_analysis_date = json["data"]["attributes"]["last_analysis_date"]
+        .as_i64()
+        .and_then(|ts| {
+            use std::time::{SystemTime, UNIX_EPOCH, Duration};
+            let analysis_time = UNIX_EPOCH + Duration::from_secs(ts as u64);
+            SystemTime::now()
+                .duration_since(analysis_time)
+                .ok()
+                .map(|elapsed| {
+                    let hours = elapsed.as_secs() / 3600;
+                    if hours < 1 {
+                        "meno di 1 ora fa".to_string()
+                    } else if hours < 24 {
+                        format!("{} ore fa", hours)
+                    } else {
+                        format!("{} giorni fa", hours / 24)
+                    }
+                })
+        });
     
     if malicious > 0 || suspicious > 2 {
         tracing::warn!(
             malicious = malicious, 
             suspicious = suspicious, 
+            harmless = harmless,
             total = total,
             url = %url,
             "VirusTotal: Minaccia rilevata!"
         );
+        
+        let report_link = format!("https://www.virustotal.com/gui/url/{}", encoded_url);
+        
         let msg = if malicious > 0 {
-            format!(
-                "🚨 <b>VirusTotal Allerta</b>\n\
-                ⚠️ Questo link è stato rilevato come <b>dannoso</b> da {}/{} motori di sicurezza.\n\
-                🔒 Si consiglia di <b>NON aprire</b> questo link.",
+            let mut alert = format!(
+                "🚨 <b>ALLERTA SICUREZZA - VirusTotal</b>\n\n\
+                ⚠️ <b>LINK PERICOLOSO RILEVATO</b>\n\
+                🔴 Dannoso: <b>{}</b> motori\n",
+                malicious
+            );
+            if suspicious > 0 {
+                alert.push_str(&format!("🟡 Sospetto: <b>{}</b> motori\n", suspicious));
+            }
+            alert.push_str(&format!(
+                "✅ Sicuro: {} motori\n\
+                📊 Totale scansioni: <b>{}/{}</b>\n",
+                harmless,
                 malicious + suspicious,
                 total
-            )
+            ));
+            if let Some(date) = last_analysis_date {
+                alert.push_str(&format!("🕐 Ultima analisi: {}\n", date));
+            }
+            alert.push_str(&format!(
+                "\n🔒 <b>NON APRIRE QUESTO LINK!</b>\n\
+                📋 <a href=\"{}\">Visualizza report completo</a>",
+                report_link
+            ));
+            alert
         } else {
-            format!(
-                "⚠️ <b>VirusTotal Avviso</b>\n\
-                Questo link è stato rilevato come sospetto da {}/{} motori di sicurezza.\n\
-                ⚠️ Procedere con cautela.",
+            let mut warning = format!(
+                "⚠️ <b>AVVISO - VirusTotal</b>\n\n\
+                🟡 Link rilevato come <b>sospetto</b>\n\
+                🟡 Sospetto: <b>{}</b> motori\n\
+                ✅ Sicuro: {} motori\n\
+                📊 Totale scansioni: <b>{}/{}</b>\n",
+                suspicious,
+                harmless,
                 suspicious,
                 total
-            )
+            );
+            if let Some(date) = last_analysis_date {
+                warning.push_str(&format!("🕐 Ultima analisi: {}\n", date));
+            }
+            warning.push_str(&format!(
+                "\n⚠️ <b>Procedere con cautela</b>\n\
+                📋 <a href=\"{}\">Visualizza report completo</a>",
+                report_link
+            ));
+            warning
         };
         Some(msg)
     } else {
-        tracing::info!(total = total, url = %url, "VirusTotal: URL sicuro (nessuna minaccia rilevata)");
-        None
+        tracing::info!(
+            total = total,
+            harmless = harmless,
+            url = %url, 
+            "VirusTotal: URL sicuro (nessuna minaccia rilevata)"
+        );
+        if alert_only {
+            return None;
+        }
+        let report_link = format!("https://www.virustotal.com/gui/url/{}", encoded_url);
+        let mut msg = format!(
+            "✅ <b>VirusTotal</b>\n\
+            Nessuna minaccia rilevata per questo URL.\n\
+            ✅ Sicuro: {} motori\n\
+            📊 Totale scansioni: <b>{}</b>",
+            harmless,
+            total
+        );
+        if let Some(date) = last_analysis_date {
+            msg.push_str(&format!("\n🕐 Ultima analisi: {}", date));
+        }
+        msg.push_str(&format!("\n📋 <a href=\"{}\">Visualizza report</a>", report_link));
+        Some(msg)
     }
 }
 
