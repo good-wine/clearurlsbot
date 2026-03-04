@@ -6,6 +6,7 @@ use clear_urls_bot::{
     sanitizer::{AiEngine, RuleEngine},
 };
 use std::time::Duration;
+use teloxide::prelude::*;
 use teloxide::Bot;
 use tokio::time::interval;
 
@@ -39,7 +40,13 @@ async fn main() -> anyhow::Result<()> {
             panic_hook(info);
             if admin_id != 0 {
                 let msg = format!("[PANIC] {}", info);
-                let _ = tokio::spawn(bot_clone.send_message(ChatId(admin_id), msg));
+                let bot_for_panic = bot_clone.clone();
+                let _ = std::thread::spawn(move || {
+                    let rt = tokio::runtime::Runtime::new().unwrap();
+                    rt.block_on(async {
+                        let _ = bot_for_panic.send_message(ChatId(admin_id), msg).await;
+                    });
+                });
             }
         }));
         let bot_task = tokio::spawn(bot::run_bot(

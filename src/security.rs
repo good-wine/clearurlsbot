@@ -1,7 +1,7 @@
 //! Security middleware and helpers for ClearURLs Bot
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use once_cell::sync::Lazy;
 
@@ -25,7 +25,7 @@ impl RateLimiter {
             Ok(u) => u,
             Err(e) => {
                 log::error!("Errore nel lock users: {}", e);
-                return HashMap::new();
+                return true;
             }
         };
         let now = Instant::now();

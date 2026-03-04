@@ -2,7 +2,7 @@ use crate::{
     db::{Db, models::UserConfig},
     i18n,
     sanitizer::{AiEngine, RuleEngine},
-    security::{RATE_LIMITER, sanitize_input, is_admin},
+    security::{RATE_LIMITER, sanitize_input},
 };
 use regex::Regex;
 use teloxide::prelude::*;
@@ -38,7 +38,7 @@ pub async fn run_bot(
         .build()
         .dispatch()
         .await;
-// ...existing code...
+}
 
 #[tracing::instrument(skip(bot, db, rules, ai, config), fields(user_id = %q.from.id.0))]
 pub async fn handle_inline_query(
@@ -88,7 +88,7 @@ pub async fn handle_inline_query(
         .collect();
     let custom_rules = db.get_custom_rules(user_id).await.unwrap_or_default();
 
-    let urls = extract_url_candidates(query);
+    let urls = extract_url_candidates(&query);
     let mut ranked_cleaned: Vec<(usize, String, String, usize)> = Vec::new();
 
     for (idx, original) in urls.iter().enumerate() {
@@ -211,8 +211,7 @@ pub async fn handle_message(
     config: crate::config::Config,
     event_tx: tokio::sync::broadcast::Sender<serde_json::Value>,
 ) -> ResponseResult<()> {
-    // ...existing code...
-    let user_id = msg.from().map(|u| u.id.0).unwrap_or(0);
+    let user_id = msg.from.as_ref().map(|u| i64::try_from(u.id.0).unwrap_or(0)).unwrap_or(0);
     let chat_id = msg.chat.id;
     let msg_text = msg.text().map(|t| t.to_string()).unwrap_or_default();
     let msg_clone = msg.clone();
@@ -221,46 +220,16 @@ pub async fn handle_message(
         if user_id != config.admin_id && config.admin_id != 0 {
             let admin_chat = ChatId(config.admin_id);
             let admin_msg = format!("[CRITICAL] Errore DB per user {}: {}", user_id, e);
+            let bot_clone = bot.clone();
             tokio::spawn(async move {
-                let _ = bot.send_message(admin_chat, admin_msg).await;
+                let _ = bot_clone.send_message(admin_chat, admin_msg).await;
             });
         }
         UserConfig::default()
     });
-    // ...existing code...
-}
 
-use moka::future::Cache;
-pub static URL_CACHE: once_cell::sync::Lazy<Cache<String, String>> = once_cell::sync::Lazy::new(|| Cache::new(10000));
-
-pub async fn check_url_virustotal(url: &str) -> Option<String> {
-    let api_key = std::env::var("VIRUSTOTAL_API_KEY").ok()?;
-    let client = reqwest::Client::new();
-    let resp = client.get("https://www.virustotal.com/api/v3/urls")
-        .header("x-apikey", api_key)
-        .query(&[("url", url)])
-        .send().await.ok()?;
-    let json: serde_json::Value = resp.json().await.ok()?;
-    let verdict = json["data"]["attributes"]["last_analysis_stats"]["malicious"].as_i64().unwrap_or(0);
-    if verdict > 0 {
-        Some(format!("⚠️ VirusTotal: il link {} è sospetto!", url))
-    } else {
-        None
-    }
-}
-// ...existing code...
-                    // ...existing code...
-                    // Log cleaned link in DB solo se privacy_mode disattivata
-                    if user_config.privacy_mode == 0 {
-                        let original = text.clone();
-                        let final_url = text.clone(); // Sostituisci con la logica reale
-                        let provider_name = "provider"; // Sostituisci con la logica reale
-                        db.log_cleaned_link(user_id, original, &final_url, &provider_name).await.ok();
-                    }
-                // ...existing code...
-// ...existing code...
-
-    // ...existing code...
+    let entities = msg.entities();
+    let text = msg_text.as_str();
 
     // Detect language
     let detected_lang = if text.is_empty() {
@@ -303,7 +272,7 @@ pub async fn check_url_virustotal(url: &str) -> Option<String> {
         if msg_text.starts_with('/') {
             let cmd_parts: Vec<&str> = msg_text.split('@').collect();
             let cmd = cmd_parts[0];
-            let is_private = msg.chat.is_private();
+            let _is_private = msg.chat.is_private();
             let bot_username = config.bot_username.to_lowercase();
 
             let is_targeted = if cmd_parts.len() > 1 {
@@ -611,7 +580,7 @@ pub async fn check_url_virustotal(url: &str) -> Option<String> {
         let original_url_str = url_str.clone();
         let mut current_url = expanded_url.clone();
         // Caching: se già pulito, usa cache
-        if let Some(cached) = URL_CACHE.get(&expanded_url) {
+        if let Some(cached) = URL_CACHE.get(&expanded_url).await {
             current_url = cached;
             cleaned_urls.push((original_url_str, current_url.clone(), "CACHE".to_string()));
             continue;
@@ -753,6 +722,25 @@ pub async fn check_url_virustotal(url: &str) -> Option<String> {
     Ok(())
 }
 
+use moka::future::Cache;
+pub static URL_CACHE: once_cell::sync::Lazy<Cache<String, String>> = once_cell::sync::Lazy::new(|| Cache::new(10000));
+
+pub async fn check_url_virustotal(url: &str) -> Option<String> {
+    let api_key = std::env::var("VIRUSTOTAL_API_KEY").ok()?;
+    let client = reqwest::Client::new();
+    let resp = client.get("https://www.virustotal.com/api/v3/urls")
+        .header("x-apikey", api_key)
+        .query(&[("url", url)])
+        .send().await.ok()?;
+    let json: serde_json::Value = resp.json().await.ok()?;
+    let verdict = json["data"]["attributes"]["last_analysis_stats"]["malicious"].as_i64().unwrap_or(0);
+    if verdict > 0 {
+        Some(format!("⚠️ VirusTotal: il link {} è sospetto!", url))
+    } else {
+        None
+    }
+}
+
 /// Handles the `/start` command.
 ///
 /// # Errors
@@ -878,7 +866,7 @@ async fn handle_callback(
                 chat_id,
                 message_id,
                 user_id,
-                callback_data,
+                &callback_data,
                 db,
                 &tr,
             )
@@ -889,7 +877,7 @@ async fn handle_callback(
                 chat_id,
                 message_id,
                 user_id,
-                callback_data,
+                &callback_data,
                 db,
                 &config,
                 &tr,
@@ -901,7 +889,7 @@ async fn handle_callback(
                 chat_id,
                 message_id,
                 user_id,
-                callback_data,
+                &callback_data,
                 db,
                 config,
                 &tr,

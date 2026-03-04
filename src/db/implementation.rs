@@ -1,22 +1,3 @@
-pub struct Database {
-    pub pool: Pool<Any>,
-}
-
-impl Database {
-    pub async fn get_top_users(&self, limit: usize) -> Result<Vec<(i64, i64)>, sqlx::Error> {
-        let rows = sqlx::query!("SELECT user_id, cleaned_count FROM user_configs ORDER BY cleaned_count DESC LIMIT ?", limit as i64)
-            .fetch_all(&self.pool)
-            .await?;
-        Ok(rows.into_iter().map(|r| (r.user_id, r.cleaned_count)).collect())
-    }
-
-    pub async fn get_top_links(&self, limit: usize) -> Result<Vec<(String, i64)>, sqlx::Error> {
-        let rows = sqlx::query!("SELECT original_url, COUNT(*) as cleaned_count FROM cleaned_links GROUP BY original_url ORDER BY cleaned_count DESC LIMIT ?", limit as i64)
-            .fetch_all(&self.pool)
-            .await?;
-        Ok(rows.into_iter().map(|r| (r.original_url, r.cleaned_count)).collect())
-    }
-}
 use super::models::{ChatConfig, CleanedLink, CustomRule, UserConfig};
 use anyhow::Result;
 use sqlx::{Any, Pool, any::AnyPoolOptions};
@@ -429,5 +410,25 @@ impl Db {
                 .fetch_all(&self.pool)
                 .await?;
         Ok(chats)
+    }
+
+    pub async fn get_top_users(&self, limit: usize) -> Result<Vec<(i64, i64)>> {
+        let rows = sqlx::query_as::<_, (i64, i64)>(
+            "SELECT user_id, cleaned_count FROM user_configs ORDER BY cleaned_count DESC LIMIT ?"
+        )
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    pub async fn get_top_links(&self, limit: usize) -> Result<Vec<(String, i64)>> {
+        let rows = sqlx::query_as::<_, (String, i64)>(
+            "SELECT original_url, COUNT(*) as cleaned_count FROM cleaned_links GROUP BY original_url ORDER BY cleaned_count DESC LIMIT ?"
+        )
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
     }
 }
