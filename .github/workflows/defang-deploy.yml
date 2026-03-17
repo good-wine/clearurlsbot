@@ -15,32 +15,32 @@ on:
           - down
       stack:
         description: The stack to deploy up or down. (Leave blank for default)
-        default: production
+        default: main
 jobs:
   defang:
-    name: Defang ${{ github.event.inputs.action || 'up' }} ${{ github.event.inputs.stack || 'production' }}
+    name: Defang ${{ github.event.inputs.action || 'up' }} ${{ github.event.inputs.stack || 'main' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
     concurrency:
       cancel-in-progress: false
-      group: deploy-clearurlsbot-${{ github.event.inputs.stack || 'production' }}
+      group: deploy-clearurlsbot-${{ github.event.inputs.stack || 'main' }}
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
-      - name: Defang ${{ github.event.inputs.action || 'up' }} ${{ github.event.inputs.stack || 'production' }}
+      - name: Defang ${{ github.event.inputs.action || 'up' }} ${{ github.event.inputs.stack || 'main' }}
         uses: DefangLabs/defang-github-action@v1
         with:
           command: ${{ github.event.inputs.action || 'up' }}
           project: clearurlsbot
-          stack: ${{ github.event.inputs.stack || 'production' }}
+          stack: ${{ github.event.inputs.stack || 'main' }}
           compose-file: compose.yml
       - name: Deployment Summary
         uses: DefangLabs/defang-github-action@v1
         with:
           command: services
           project: clearurlsbot
-          stack: ${{ github.event.inputs.stack || 'production' }}
+          stack: ${{ github.event.inputs.stack || 'main' }}
           compose-file: compose.yml
-    environment: defang-production
+    environment: defang-main
